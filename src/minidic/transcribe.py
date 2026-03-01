@@ -65,31 +65,47 @@ class Transcriber:
             return
         logger.info("Loading ASR model %s …", self.model_id)
         # parakeet_mlx.from_pretrained does not expose a local_files_only
-        # parameter, so we use the HF_HUB_OFFLINE env var to try an offline
-        # load first.  This must be called before spawning worker threads
-        # because os.environ is process-global and not thread-safe.
-        _prev = os.environ.get("HF_HUB_OFFLINE")
+        # parameter, so we force huggingface_hub into offline mode first,
+        # then fall back to online if cache is incomplete.
+        #
+        # Note: huggingface_hub computes offline mode at import-time via
+        # constants.HF_HUB_OFFLINE, so mutating os.environ alone can be too
+        # late. We update both env and the constants flag temporarily.
+        _prev_env = os.environ.get("HF_HUB_OFFLINE")
+        _hf_constants = None
+        _prev_const: bool | None = None
+        try:
+            import huggingface_hub.constants as _hf_constants  # type: ignore[import-not-found]
+
+            _prev_const = getattr(_hf_constants, "HF_HUB_OFFLINE", None)
+        except Exception:
+            _hf_constants = None
+
+        def _restore_offline_state() -> None:
+            if _prev_env is None:
+                os.environ.pop("HF_HUB_OFFLINE", None)
+            else:
+                os.environ["HF_HUB_OFFLINE"] = _prev_env
+            if _hf_constants is not None and isinstance(_prev_const, bool):
+                _hf_constants.HF_HUB_OFFLINE = _prev_const
+
         try:
             os.environ["HF_HUB_OFFLINE"] = "1"
+            if _hf_constants is not None and isinstance(_prev_const, bool):
+                _hf_constants.HF_HUB_OFFLINE = True
             self._model = parakeet_mlx.from_pretrained(self.model_id)
         except Exception as exc:
-            # Not cached yet — restore env and allow network download.
+            # Not cached yet — restore flags and allow network download.
             logger.warning(
                 "Offline model load failed for %s; falling back to online download: %s",
                 self.model_id,
                 exc,
             )
             logger.debug("Offline load traceback", exc_info=True)
-            if _prev is None:
-                os.environ.pop("HF_HUB_OFFLINE", None)
-            else:
-                os.environ["HF_HUB_OFFLINE"] = _prev
+            _restore_offline_state()
             self._model = parakeet_mlx.from_pretrained(self.model_id)
         finally:
-            if _prev is None:
-                os.environ.pop("HF_HUB_OFFLINE", None)
-            else:
-                os.environ["HF_HUB_OFFLINE"] = _prev
+            _restore_offline_state()
         logger.info("ASR model loaded")
 
     def unload(self) -> None:
