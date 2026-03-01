@@ -1,6 +1,6 @@
 # minidic
 
-A tiny **vibe coding** project for real-time voice dictation on macOS.
+A tiny **vibe coding** project for voice dictation on macOS.
 
 ## What this project is
 
