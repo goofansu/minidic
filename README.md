@@ -42,13 +42,21 @@ uv sync
 uv run minidic
 ```
 
-Useful commands:
+Typical usage:
+
+1. Start menu bar app:
+
+   ```bash
+   uv run minidic menubar
+   ```
+
+2. In the menu bar app, click **Start daemon** (or **Stop daemon** to stop it).
+
+3. Press `F5` to toggle start/stop dictation.
+
+Other useful commands:
 
 ```bash
-uv run minidic start      # start background daemon
-uv run minidic status     # check daemon status
-uv run minidic stop       # stop daemon
-uv run minidic menubar    # launch menu bar app
 uv run minidic transcribe path/to/file.wav
 ```
 
