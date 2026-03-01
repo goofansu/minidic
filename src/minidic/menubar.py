@@ -12,6 +12,7 @@ from AppKit import (
     NSApp,
     NSApplication,
     NSApplicationActivationPolicyAccessory,
+    NSImage,
     NSMenu,
     NSMenuItem,
     NSStatusBar,
@@ -53,46 +54,38 @@ def _read_pid() -> int | None:
     return pid
 
 
-def _tail_lines(path: Path, *, max_lines: int = 200, max_bytes: int = 24_000) -> list[str]:
-    if not path.exists():
-        return []
-
-    with path.open("rb") as f:
-        f.seek(0, os.SEEK_END)
-        size = f.tell()
-        read_size = min(size, max_bytes)
-        if read_size == 0:
-            return []
-        f.seek(-read_size, os.SEEK_END)
-        data = f.read(read_size)
-
-    text = data.decode("utf-8", errors="replace")
-    lines = text.splitlines()
-    if len(lines) > max_lines:
-        lines = lines[-max_lines:]
-    return lines
-
-
 def _infer_daemon_state() -> tuple[str, int | None, str]:
     """Return (state, pid, detail)."""
     pid = _read_pid()
     if pid is None:
         return "stopped", None, "Daemon is not running"
+    return "running", pid, "Running"
 
-    lines = _tail_lines(_LOG_FILE)
-    for line in reversed(lines):
-        if "Recording started" in line:
-            return "recording", pid, "Recording"
-        if "Transcribing" in line or "Recording stopped" in line:
-            return "transcribing", pid, "Transcribing"
-        if "Injected:" in line or "No speech detected" in line:
-            return "idle", pid, "Ready"
-        if "Daemon ready" in line:
-            return "idle", pid, "Ready"
-        if "ERROR" in line or "crashed" in line:
-            return "error", pid, "Error (check log)"
 
-    return "idle", pid, "Running"
+def _emoji_for_state(state: str) -> str:
+    if state == "stopped":
+        return "🛑"
+    return "🎙️"
+
+
+def _symbol_name_for_state(state: str) -> str:
+    if state == "stopped":
+        return "mic.slash"
+    return "mic.fill"
+
+
+def _set_menu_bar_icon(button: object, state: str) -> None:
+    symbol_api = getattr(NSImage, "imageWithSystemSymbolName_accessibilityDescription_", None)
+    if callable(symbol_api):
+        image = symbol_api(_symbol_name_for_state(state), "minidic")
+        if image is not None:
+            image.setTemplate_(True)
+            button.setImage_(image)
+            button.setTitle_("")
+            return
+
+    button.setImage_(None)
+    button.setTitle_(_emoji_for_state(state))
 
 
 class MiniDicMenuBarApp(NSObject):
@@ -165,20 +158,9 @@ class MiniDicMenuBarApp(NSObject):
     def refreshStatus_(self, timer: object) -> None:
         state, pid, detail = _infer_daemon_state()
 
-        if state == "stopped":
-            title = "🛑"
-        elif state == "recording":
-            title = "🔴"
-        elif state == "transcribing":
-            title = "⏳"
-        elif state == "error":
-            title = "⚠️"
-        else:
-            title = "🎙️"
-
         button = self.status_item.button()
         if button is not None:
-            button.setTitle_(title)
+            _set_menu_bar_icon(button, state)
             button.setToolTip_(f"minidic: {detail}")
 
         if pid is None:
