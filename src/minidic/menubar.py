@@ -9,20 +9,33 @@ import sys
 from pathlib import Path
 
 from AppKit import (
+    NSAnimationContext,
     NSApp,
     NSApplication,
     NSApplicationActivationPolicyAccessory,
+    NSBackingStoreBuffered,
+    NSColor,
+    NSFont,
     NSImage,
     NSMenu,
     NSMenuItem,
+    NSScreen,
     NSStatusBar,
+    NSStatusWindowLevel,
+    NSTextAlignmentCenter,
+    NSTextField,
     NSVariableStatusItemLength,
+    NSWindow,
+    NSWindowCollectionBehaviorCanJoinAllSpaces,
+    NSWindowCollectionBehaviorFullScreenAuxiliary,
+    NSWindowStyleMaskBorderless,
 )
 from Foundation import NSObject, NSTimer
 
 _MINIDIC_DIR = Path.home() / ".minidic"
 _PID_FILE = _MINIDIC_DIR / "daemon.pid"
 _LOG_FILE = _MINIDIC_DIR / "daemon.log"
+_STATE_FILE = _MINIDIC_DIR / "daemon.state"
 
 
 def _is_minidic_process(pid: int) -> bool:
@@ -54,10 +67,19 @@ def _read_pid() -> int | None:
     return pid
 
 
+def _read_runtime_state() -> str:
+    try:
+        state = _STATE_FILE.read_text().strip().lower()
+    except OSError:
+        return "idle"
+    return state if state in {"idle", "recording", "transcribing"} else "idle"
+
+
 def _infer_daemon_state() -> tuple[str, int | None, str]:
     """Return (state, pid, detail)."""
     pid = _read_pid()
     if pid is None:
+        _STATE_FILE.unlink(missing_ok=True)
         return "stopped", None, "Daemon is not running"
     return "running", pid, "Running"
 
@@ -103,6 +125,10 @@ class MiniDicMenuBarApp(NSObject):
         self.status_label_item = None
         self.toggle_daemon_item = None
 
+        self.last_runtime_state = "stopped"
+        self.overlay_window = None
+        self.overlay_timer = None
+
         return self
 
     def applicationDidFinishLaunching_(self, notification: object) -> None:
@@ -143,7 +169,7 @@ class MiniDicMenuBarApp(NSObject):
         self.refreshStatus_(None)
 
         self.timer = NSTimer.scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_(
-            1.0,
+            0.2,
             self,
             "refreshStatus:",
             None,
@@ -154,6 +180,12 @@ class MiniDicMenuBarApp(NSObject):
         if self.timer is not None:
             self.timer.invalidate()
             self.timer = None
+        if self.overlay_timer is not None:
+            self.overlay_timer.invalidate()
+            self.overlay_timer = None
+        if self.overlay_window is not None:
+            self.overlay_window.orderOut_(None)
+            self.overlay_window = None
 
     def refreshStatus_(self, timer: object) -> None:
         state, pid, detail = _infer_daemon_state()
@@ -166,9 +198,101 @@ class MiniDicMenuBarApp(NSObject):
         if pid is None:
             self.status_label_item.setTitle_("Status: stopped")
             self.toggle_daemon_item.setTitle_("Start daemon")
+            runtime_state = "stopped"
         else:
             self.status_label_item.setTitle_(f"Status: {detail} (pid {pid})")
             self.toggle_daemon_item.setTitle_("Stop daemon")
+            runtime_state = _read_runtime_state()
+
+        if runtime_state == "recording" and self.last_runtime_state != "recording":
+            self.showDictationOverlay()
+
+        self.last_runtime_state = runtime_state
+
+    def showDictationOverlay(self) -> None:
+        if self.overlay_timer is not None:
+            self.overlay_timer.invalidate()
+            self.overlay_timer = None
+
+        width = 320
+        height = 72
+
+        target_screen = NSScreen.mainScreen()
+        if target_screen is None:
+            return
+
+        frame = target_screen.frame()
+        top_margin = 48
+        x = frame.origin.x + (frame.size.width - width) / 2
+        y = frame.origin.y + frame.size.height - height - top_margin
+
+        if self.overlay_window is None:
+            self.overlay_window = NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
+                ((x, y), (width, height)),
+                NSWindowStyleMaskBorderless,
+                NSBackingStoreBuffered,
+                False,
+            )
+            self.overlay_window.setLevel_(NSStatusWindowLevel)
+            self.overlay_window.setOpaque_(False)
+            self.overlay_window.setBackgroundColor_(
+                NSColor.colorWithCalibratedWhite_alpha_(0.05, 0.85)
+            )
+            self.overlay_window.setIgnoresMouseEvents_(True)
+            self.overlay_window.setHasShadow_(True)
+            self.overlay_window.setCollectionBehavior_(
+                NSWindowCollectionBehaviorCanJoinAllSpaces
+                | NSWindowCollectionBehaviorFullScreenAuxiliary
+            )
+
+            label = NSTextField.alloc().initWithFrame_(((16, 16), (width - 32, height - 32)))
+            label.setEditable_(False)
+            label.setBezeled_(False)
+            label.setDrawsBackground_(False)
+            label.setSelectable_(False)
+            label.setAlignment_(NSTextAlignmentCenter)
+            label.setTextColor_(NSColor.whiteColor())
+            label.setFont_(NSFont.boldSystemFontOfSize_(24.0))
+            label.setStringValue_("🎙️ Dictation started")
+            self.overlay_window.contentView().addSubview_(label)
+        else:
+            self.overlay_window.setFrame_display_(((x, y), (width, height)), True)
+            for view in self.overlay_window.contentView().subviews():
+                if isinstance(view, NSTextField):
+                    view.setStringValue_("🎙️ Dictation started")
+
+        self.overlay_window.setAlphaValue_(0.0)
+        self.overlay_window.orderFrontRegardless()
+
+        def _fade_in(context: object) -> None:
+            context.setDuration_(0.35)
+            self.overlay_window.animator().setAlphaValue_(1.0)
+
+        NSAnimationContext.runAnimationGroup_completionHandler_(_fade_in, None)
+
+        self.overlay_timer = NSTimer.scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_(
+            1.2,
+            self,
+            "hideOverlay:",
+            None,
+            False,
+        )
+
+    def hideOverlay_(self, timer: object) -> None:
+        if self.overlay_window is None:
+            self.overlay_timer = None
+            return
+
+        def _fade_out(context: object) -> None:
+            context.setDuration_(0.3)
+            self.overlay_window.animator().setAlphaValue_(0.0)
+
+        def _finish() -> None:
+            if self.overlay_window is not None:
+                self.overlay_window.orderOut_(None)
+
+        NSAnimationContext.runAnimationGroup_completionHandler_(_fade_out, _finish)
+        self.overlay_timer = None
 
     def buildCommandForSubcommand_(self, subcommand: str) -> list[str]:
         cmd = [sys.executable, "-m", "minidic"]

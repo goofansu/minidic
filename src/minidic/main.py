@@ -28,6 +28,7 @@ _PID_FILE = _MINIDIC_DIR / "daemon.pid"
 _LOG_FILE = _MINIDIC_DIR / "daemon.log"
 _MENUBAR_PID_FILE = _MINIDIC_DIR / "menubar.pid"
 _MENUBAR_LOG_FILE = _MINIDIC_DIR / "menubar.log"
+_STATE_FILE = _MINIDIC_DIR / "daemon.state"
 _MODEL_IDLE_UNLOAD_SECONDS = 5 * 60
 
 
@@ -334,6 +335,7 @@ def cmd_daemon(args: argparse.Namespace) -> None:
         sys.exit(1)
     finally:
         _PID_FILE.unlink(missing_ok=True)
+        _STATE_FILE.unlink(missing_ok=True)
 
 
 def cmd_stop(args: argparse.Namespace) -> None:
@@ -415,6 +417,12 @@ def _run_daemon(args: argparse.Namespace) -> None:
     mode = "idle"  # "idle" | "recording" | "draining" | "transcribing"
     lock = threading.Lock()
 
+    def _write_state(state: str) -> None:
+        try:
+            _STATE_FILE.write_text(state)
+        except OSError:
+            logger.exception("Failed to write state file: %s", _STATE_FILE)
+
     # Signal the audio-pump to finish recording and hand off chunks.
     finish_event = threading.Event()
 
@@ -473,6 +481,7 @@ def _run_daemon(args: argparse.Namespace) -> None:
 
         with lock:
             mode = "transcribing"
+            _write_state("transcribing")
             chunks = list(recording_chunks)
             recording_chunks.clear()
             sample_count = 0
@@ -520,6 +529,7 @@ def _run_daemon(args: argparse.Namespace) -> None:
         finally:
             with lock:
                 mode = "idle"
+                _write_state("idle")
 
     # -- model lifecycle ---------------------------------------------------
 
@@ -562,6 +572,7 @@ def _run_daemon(args: argparse.Namespace) -> None:
                     return
                 audio = stream
                 mode = "recording"
+                _write_state("recording")
                 logger.info("Recording started (mic opened).")
 
             elif mode == "recording":
@@ -581,6 +592,7 @@ def _run_daemon(args: argparse.Namespace) -> None:
     # All initialization succeeded — publish PID file so cmd_start and
     # cmd_status can discover us.  This is the readiness signal.
     _PID_FILE.write_text(str(os.getpid()))
+    _write_state("idle")
     logger.info("Daemon ready — F5 to dictate.")
 
     # Block until SIGTERM.
@@ -595,6 +607,7 @@ def _run_daemon(args: argparse.Namespace) -> None:
         if model_loaded:
             transcriber.unload()
     listener.stop()
+    _STATE_FILE.unlink(missing_ok=True)
 
 
 # ---------------------------------------------------------------------------
