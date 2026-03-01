@@ -30,30 +30,69 @@ from Quartz import (
 
 logger = logging.getLogger(__name__)
 
-# macOS virtual key code for F5.
-F5_KEYCODE = 96
+# Function-key names supported by this listener.
+HOTKEY_TO_KEYCODE = {
+    "F1": 122,
+    "F2": 120,
+    "F3": 99,
+    "F4": 118,
+    "F5": 96,
+    "F6": 97,
+    "F7": 98,
+    "F8": 100,
+    "F9": 101,
+    "F10": 109,
+    "F11": 103,
+    "F12": 111,
+}
 
+SUPPORTED_HOTKEYS = tuple(HOTKEY_TO_KEYCODE.keys())
 
 
 # Minimum interval between successive triggers (seconds).
 _DEBOUNCE_SECONDS = 0.3
 
 
-class GlobalHotkeyListener:
-    """Listens globally for F5 key-down events and invokes a callback.
+def normalize_hotkey(value: str) -> str:
+    """Normalize a user hotkey string (e.g. 'f5' -> 'F5')."""
+    return value.strip().upper()
 
-    Uses a macOS ``CGEventTap`` in listen-only mode so that the F5
-    keypress is still delivered to the focused application.  The event
-    tap's ``CFRunLoop`` runs on a daemon thread.
+
+def parse_hotkey_keycode(value: str) -> int:
+    """Parse hotkey name and return macOS virtual keycode.
+
+    Raises
+    ------
+    ValueError
+        If the hotkey name is unsupported.
+    """
+    hotkey = normalize_hotkey(value)
+    try:
+        return HOTKEY_TO_KEYCODE[hotkey]
+    except KeyError as exc:
+        supported = ", ".join(SUPPORTED_HOTKEYS)
+        raise ValueError(f"Unsupported hotkey '{value}'. Supported: {supported}") from exc
+
+
+class GlobalHotkeyListener:
+    """Listens globally for a function-key event and invokes a callback.
+
+    Uses a macOS ``CGEventTap`` in listen-only mode so the keypress is
+    still delivered to the focused application. The event tap's
+    ``CFRunLoop`` runs on a daemon thread.
 
     Parameters
     ----------
     on_hotkey:
-        Called (on the run-loop thread) each time F5 is pressed.
+        Called (on the run-loop thread) each time the hotkey is pressed.
+    hotkey:
+        Function key name, e.g. ``F5``.
     """
 
-    def __init__(self, on_hotkey: Callable[[], None]) -> None:
+    def __init__(self, on_hotkey: Callable[[], None], *, hotkey: str = "F5") -> None:
         self._on_hotkey = on_hotkey
+        self._hotkey_name = normalize_hotkey(hotkey)
+        self._hotkey_keycode = parse_hotkey_keycode(self._hotkey_name)
         self._tap = None
         self._run_loop = None
         self._thread: threading.Thread | None = None
@@ -80,10 +119,10 @@ class GlobalHotkeyListener:
 
         keycode = CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode)
 
-        if keycode != F5_KEYCODE or event_type != kCGEventKeyDown:
+        if keycode != self._hotkey_keycode or event_type != kCGEventKeyDown:
             return event
 
-        # Ignore auto-repeat events (holding F5 down).
+        # Ignore auto-repeat events (holding key down).
         if CGEventGetIntegerValueField(event, kCGKeyboardEventAutorepeat):
             return event
 
@@ -93,7 +132,7 @@ class GlobalHotkeyListener:
             return event
         self._last_trigger = now
 
-        logger.debug("F5 hotkey triggered")
+        logger.debug("%s hotkey triggered", self._hotkey_name)
         try:
             self._on_hotkey()
         except Exception:
@@ -124,14 +163,11 @@ class GlobalHotkeyListener:
         try:
             thread.start()
         except Exception:
-            # Thread failed to spawn — don't leave stale state.
             raise RuntimeError("Failed to start hotkey listener thread")
 
         self._thread = thread
 
-        # Wait for the run-loop thread to signal success or failure.
         if not self._started.wait(timeout=self._START_TIMEOUT):
-            # Timed out — thread is stuck or died before signalling.
             self._thread = None
             alive = thread.is_alive()
             raise RuntimeError(
@@ -157,10 +193,6 @@ class GlobalHotkeyListener:
     def _run(self) -> None:
         """Create the event tap and enter the CFRunLoop (blocks)."""
         try:
-            # Listen for regular key-down events only.  On Mac laptops
-            # where function keys default to media-key mode, the user
-            # must either hold Fn+F5 or enable "Use F1, F2, etc. keys
-            # as standard function keys" in System Settings → Keyboard.
             mask = 1 << kCGEventKeyDown
 
             # 1 = kCGEventTapOptionListenOnly — we observe but never block input.
@@ -188,15 +220,13 @@ class GlobalHotkeyListener:
             CFRunLoopAddSource(self._run_loop, source, kCFRunLoopDefaultMode)
             CGEventTapEnable(tap, True)
 
-            logger.info("Global hotkey listener active (F5)")
+            logger.info("Global hotkey listener active (%s)", self._hotkey_name)
         except Exception as exc:
             self._start_error = f"Hotkey listener failed during setup: {exc}"
             logger.exception("Hotkey listener failed during setup")
             return
         finally:
-            # Always unblock start(), whether we succeeded or failed.
             self._started.set()
 
-        # Enter the run loop only after signalling success.
         CFRunLoopRun()
         logger.debug("Hotkey run loop exited")

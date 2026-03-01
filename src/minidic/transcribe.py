@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gc
 import logging
 import os
 import re
@@ -71,8 +72,14 @@ class Transcriber:
         try:
             os.environ["HF_HUB_OFFLINE"] = "1"
             self._model = parakeet_mlx.from_pretrained(self.model_id)
-        except Exception:
+        except Exception as exc:
             # Not cached yet — restore env and allow network download.
+            logger.warning(
+                "Offline model load failed for %s; falling back to online download: %s",
+                self.model_id,
+                exc,
+            )
+            logger.debug("Offline load traceback", exc_info=True)
             if _prev is None:
                 os.environ.pop("HF_HUB_OFFLINE", None)
             else:
@@ -84,6 +91,16 @@ class Transcriber:
             else:
                 os.environ["HF_HUB_OFFLINE"] = _prev
         logger.info("ASR model loaded")
+
+    def unload(self) -> None:
+        """Unload the ASR model and release cached MLX memory."""
+        if self._model is None:
+            return
+        logger.info("Unloading ASR model %s …", self.model_id)
+        self._model = None
+        gc.collect()
+        mx.clear_cache()
+        logger.info("ASR model unloaded")
 
     @property
     def model(self) -> parakeet_mlx.BaseParakeet:

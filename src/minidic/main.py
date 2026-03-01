@@ -26,6 +26,9 @@ logger = logging.getLogger(__name__)
 _MINIDIC_DIR = Path.home() / ".minidic"
 _PID_FILE = _MINIDIC_DIR / "daemon.pid"
 _LOG_FILE = _MINIDIC_DIR / "daemon.log"
+_MENUBAR_PID_FILE = _MINIDIC_DIR / "menubar.pid"
+_MENUBAR_LOG_FILE = _MINIDIC_DIR / "menubar.log"
+_MODEL_IDLE_UNLOAD_SECONDS = 5 * 60
 
 
 def _save_wav(chunks: list[np.ndarray]) -> Path:
@@ -86,6 +89,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     # --- transcribe ---
     sp_transcribe = sub.add_parser("transcribe", help="Transcribe a WAV file")
     sp_transcribe.add_argument("file", help="Path to WAV file")
+
+    # --- menubar ---
+    sub.add_parser(
+        "menubar",
+        help="Launch menu bar status app in background",
+    )
+
+    # --- _menubar (hidden, used internally by menubar) ---
+    sub.add_parser("_menubar")
 
     # --- _daemon (hidden, used internally by start) ---
     sub.add_parser("_daemon")
@@ -214,6 +226,37 @@ def _read_pid() -> int | None:
     return pid
 
 
+def _is_menubar_process(pid: int) -> bool:
+    """Return True if *pid* belongs to a running minidic menu bar app."""
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    try:
+        out = _subprocess.check_output(
+            ["ps", "-p", str(pid), "-o", "command="],
+            text=True,
+            stderr=_subprocess.DEVNULL,
+        ).strip()
+        return "-m minidic" in out and "_menubar" in out
+    except (OSError, _subprocess.CalledProcessError):
+        return False
+
+
+def _read_menubar_pid() -> int | None:
+    """Read the menubar PID from file, return None if missing or stale."""
+    if not _MENUBAR_PID_FILE.exists():
+        return None
+    try:
+        pid = int(_MENUBAR_PID_FILE.read_text().strip())
+    except (ValueError, OSError):
+        return None
+    if not _is_menubar_process(pid):
+        _MENUBAR_PID_FILE.unlink(missing_ok=True)
+        return None
+    return pid
+
+
 def cmd_start(args: argparse.Namespace) -> None:
     """Start the dictation daemon in the background."""
     import subprocess
@@ -226,7 +269,8 @@ def cmd_start(args: argparse.Namespace) -> None:
     _MINIDIC_DIR.mkdir(parents=True, exist_ok=True)
 
     # Build command for the hidden _daemon subcommand.
-    # Global options (--verbose, --model, --duration) must precede the subcommand.
+    # Global options (--verbose, --model, --duration)
+    # must precede the subcommand.
     cmd = [sys.executable, "-m", "minidic"]
     if args.verbose:
         cmd.append("--verbose")
@@ -244,9 +288,9 @@ def cmd_start(args: argparse.Namespace) -> None:
     )
 
     # Poll until the daemon signals readiness (PID file) or dies.
-    # The daemon only writes the PID file after full initialization
-    # (model loaded, hotkey listener active), so its appearance is a
-    # reliable readiness signal.
+    # The daemon writes the PID file after initialization succeeds
+    # (hotkey listener active), so its appearance is a reliable
+    # readiness signal.
     start_time = time.monotonic()
     notified = False
     while True:
@@ -266,8 +310,7 @@ def cmd_start(args: argparse.Namespace) -> None:
             return
         if not notified and time.monotonic() - start_time > 3:
             print(
-                "Waiting for daemon to initialize "
-                "(model loading may take a moment) …",
+                "Waiting for daemon to initialize …",
                 flush=True,
             )
             notified = True
@@ -277,9 +320,9 @@ def cmd_start(args: argparse.Namespace) -> None:
 def cmd_daemon(args: argparse.Namespace) -> None:
     """Run the daemon in the foreground (called by cmd_start).
 
-    The PID file is written by ``_run_daemon`` *after* all
-    initialization succeeds (model loaded, hotkey listener active).
-    ``cmd_start`` polls for its appearance as the readiness signal.
+    The PID file is written by ``_run_daemon`` *after* initialization
+    succeeds (hotkey listener active). ``cmd_start`` polls for its
+    appearance as the readiness signal.
     """
     _MINIDIC_DIR.mkdir(parents=True, exist_ok=True)
     _setup_logging(args.verbose, to_file=True)
@@ -336,13 +379,13 @@ def cmd_status(args: argparse.Namespace) -> None:
 
 
 # ---------------------------------------------------------------------------
-# F5 hotkey daemon
+# Global hotkey daemon
 # ---------------------------------------------------------------------------
 
 def _run_daemon(args: argparse.Namespace) -> None:
-    """F5 global-hotkey dictation daemon (runs in background).
+    """Global-hotkey dictation daemon (runs in background).
 
-    The microphone is only opened while recording (between F5 presses)
+    The microphone is only opened while recording (between hotkey presses)
     to avoid holding the device and wasting resources when idle.  A
     short post-roll drain ensures the tail of speech isn't clipped.
     """
@@ -356,11 +399,12 @@ def _run_daemon(args: argparse.Namespace) -> None:
 
     signal.signal(signal.SIGTERM, _on_sigterm)
 
-    # --- Load models ---
+    # --- Initialize models (lazy-load on first transcription) ---
     transcriber = Transcriber(model_id=args.model)
-    logger.info("Loading ASR model (%s) …", args.model)
-    transcriber.load()
-    logger.info("ASR model ready.")
+    model_loaded = False
+    last_model_use: float | None = None
+    model_lock = threading.Lock()
+    logger.info("ASR model will load on first transcription (%s).", args.model)
 
     max_speech_samples = int(args.duration * TARGET_RATE)
 
@@ -444,7 +488,7 @@ def _run_daemon(args: argparse.Namespace) -> None:
         ).start()
 
     def _transcribe_and_inject(chunks: list[np.ndarray]) -> None:
-        nonlocal mode
+        nonlocal mode, model_loaded, last_model_use
         try:
             if not chunks:
                 return
@@ -456,7 +500,15 @@ def _run_daemon(args: argparse.Namespace) -> None:
             duration = len(audio_f32) / TARGET_RATE
             logger.info("Transcribing %.1fs …", duration)
 
-            text = transcriber.transcribe(audio_f32)
+            with model_lock:
+                if not model_loaded:
+                    logger.info("Loading ASR model (%s) …", args.model)
+                    transcriber.load()
+                    model_loaded = True
+                    logger.info("ASR model ready.")
+
+                text = transcriber.transcribe(audio_f32)
+                last_model_use = time.monotonic()
 
             if text.strip():
                 inject_text(text)
@@ -469,9 +521,32 @@ def _run_daemon(args: argparse.Namespace) -> None:
             with lock:
                 mode = "idle"
 
+    # -- model lifecycle ---------------------------------------------------
+
+    def _model_reaper() -> None:
+        nonlocal model_loaded, last_model_use
+        while not shutdown.wait(5.0):
+            with lock:
+                if mode != "idle":
+                    continue
+
+            with model_lock:
+                if not model_loaded or last_model_use is None:
+                    continue
+                idle_for = time.monotonic() - last_model_use
+                if idle_for < _MODEL_IDLE_UNLOAD_SECONDS:
+                    continue
+                transcriber.unload()
+                model_loaded = False
+                last_model_use = None
+                logger.info(
+                    "ASR model unloaded after %.0fs idle.",
+                    idle_for,
+                )
+
     # -- hotkey handler ----------------------------------------------------
 
-    def on_f5() -> None:
+    def on_hotkey() -> None:
         nonlocal sample_count, mode, audio
 
         with lock:
@@ -494,12 +569,13 @@ def _run_daemon(args: argparse.Namespace) -> None:
                 finish_event.set()
 
             else:
-                logger.debug("F5 ignored — transcription in progress")
+                logger.debug("Hotkey ignored — transcription in progress")
 
     # --- Start threads ----------------------------------------------------
     threading.Thread(target=_audio_pump, name="audio-pump", daemon=True).start()
+    threading.Thread(target=_model_reaper, name="model-reaper", daemon=True).start()
 
-    listener = GlobalHotkeyListener(on_hotkey=on_f5)
+    listener = GlobalHotkeyListener(on_hotkey=on_hotkey)
     listener.start()
 
     # All initialization succeeded — publish PID file so cmd_start and
@@ -515,7 +591,102 @@ def _run_daemon(args: argparse.Namespace) -> None:
         if audio is not None:
             audio.stop()
             audio = None
+    with model_lock:
+        if model_loaded:
+            transcriber.unload()
     listener.stop()
+
+
+# ---------------------------------------------------------------------------
+# Menu bar app
+# ---------------------------------------------------------------------------
+
+def cmd_menubar(args: argparse.Namespace) -> None:
+    """Launch the menu bar app in background and return immediately."""
+    import subprocess
+
+    existing = _read_menubar_pid()
+    if existing is not None:
+        print(f"Menu bar app already running (pid {existing}).", flush=True)
+        sys.exit(1)
+
+    _MINIDIC_DIR.mkdir(parents=True, exist_ok=True)
+
+    cmd = [sys.executable, "-m", "minidic"]
+    if args.verbose:
+        cmd.append("--verbose")
+    cmd.extend(
+        [
+            "--model",
+            args.model,
+            "--duration",
+            str(args.duration),
+            "_menubar",
+        ]
+    )
+
+    devnull = open(os.devnull, "r+b")
+    with _MENUBAR_LOG_FILE.open("a", encoding="utf-8") as log_file:
+        proc = subprocess.Popen(
+            cmd,
+            stdin=devnull,
+            stdout=log_file,
+            stderr=log_file,
+            start_new_session=True,
+        )
+
+    # Wait briefly for startup signal (pid file) or immediate crash.
+    start_time = time.monotonic()
+    while time.monotonic() - start_time < 2.0:
+        rc = proc.poll()
+        if rc is not None:
+            print(
+                f"Menu bar app failed to start (exit code {rc}). "
+                f"Check log: {_MENUBAR_LOG_FILE}",
+                flush=True,
+            )
+            sys.exit(1)
+
+        running_pid = _read_menubar_pid()
+        if running_pid is not None:
+            print(f"Menu bar app launched (pid {running_pid}).", flush=True)
+            return
+
+        time.sleep(0.1)
+
+    rc = proc.poll()
+    if rc is not None:
+        print(
+            f"Menu bar app failed to start (exit code {rc}). "
+            f"Check log: {_MENUBAR_LOG_FILE}",
+            flush=True,
+        )
+        sys.exit(1)
+
+    proc.terminate()
+    print(
+        f"Menu bar app launch timed out before readiness signal. "
+        f"Check log: {_MENUBAR_LOG_FILE}",
+        flush=True,
+    )
+    sys.exit(1)
+
+
+def cmd_menubar_foreground(args: argparse.Namespace) -> None:
+    """Run the menu bar app in foreground (internal)."""
+    from minidic.menubar import run_menubar
+
+    existing = _read_menubar_pid()
+    if existing is not None and existing != os.getpid():
+        print(f"Menu bar app already running (pid {existing}).", flush=True)
+        sys.exit(1)
+
+    _MINIDIC_DIR.mkdir(parents=True, exist_ok=True)
+    _MENUBAR_PID_FILE.write_text(str(os.getpid()))
+    try:
+        run_menubar(args)
+    finally:
+        _MENUBAR_PID_FILE.unlink(missing_ok=True)
 
 
 # ---------------------------------------------------------------------------
@@ -593,6 +764,10 @@ def main() -> None:
             cmd_status(args)
         case "transcribe":
             cmd_transcribe(args)
+        case "menubar":
+            cmd_menubar(args)
+        case "_menubar":
+            cmd_menubar_foreground(args)
         case "_daemon":
             cmd_daemon(args)
         case _:
