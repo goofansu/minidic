@@ -35,20 +35,23 @@ Model runtime:
 
 The model is downloaded on first use (and then reused from local cache).
 
-## Run locally
+## Install
 
 ```bash
 uv sync
 uv run minidic
 ```
 
-Typical usage:
+## Usage
 
 1. Start menu bar app:
 
    ```bash
    uv run minidic menubar
    ```
+
+   ![Menu bar icon (stopped)](screenshots/menubar-step1-start.png)
+   ![Menu bar icon (running)](screenshots/menubar-step1-status.png)
 
 2. In the menu bar app, click **Start daemon** (or **Stop daemon** to stop it).
 
