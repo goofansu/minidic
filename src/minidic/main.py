@@ -29,7 +29,7 @@ _LOG_FILE = _MINIDIC_DIR / "daemon.log"
 _MENUBAR_PID_FILE = _MINIDIC_DIR / "menubar.pid"
 _MENUBAR_LOG_FILE = _MINIDIC_DIR / "menubar.log"
 _STATE_FILE = _MINIDIC_DIR / "daemon.state"
-_MODEL_IDLE_UNLOAD_SECONDS = 5 * 60
+_MODEL_IDLE_UNLOAD_SECONDS = 30 * 60
 
 
 def _save_wav(chunks: list[np.ndarray]) -> Path:
