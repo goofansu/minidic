@@ -1,7 +1,10 @@
 """Global hotkey listener for macOS using CGEventTap.
 
 Requires the Accessibility permission to be granted in
-System Preferences → Privacy & Security → Accessibility.
+System Settings → Privacy & Security → Accessibility.
+
+The listener uses an active event tap (not listen-only), so the configured
+hotkey is swallowed globally and does not reach the focused application.
 """
 
 from __future__ import annotations
@@ -77,9 +80,9 @@ def parse_hotkey_keycode(value: str) -> int:
 class GlobalHotkeyListener:
     """Listens globally for a function-key event and invokes a callback.
 
-    Uses a macOS ``CGEventTap`` in listen-only mode so the keypress is
-    still delivered to the focused application. The event tap's
-    ``CFRunLoop`` runs on a daemon thread.
+    Uses a macOS ``CGEventTap`` in active mode so the configured hotkey is
+    intercepted before apps receive it. The event tap's ``CFRunLoop`` runs
+    on a daemon thread.
 
     Parameters
     ----------
@@ -122,14 +125,15 @@ class GlobalHotkeyListener:
         if keycode != self._hotkey_keycode or event_type != kCGEventKeyDown:
             return event
 
-        # Ignore auto-repeat events (holding key down).
+        # Ignore auto-repeat events (holding key down), but still swallow
+        # the key so it does not leak into the focused application.
         if CGEventGetIntegerValueField(event, kCGKeyboardEventAutorepeat):
-            return event
+            return None
 
-        # Debounce rapid presses.
+        # Debounce rapid presses, while keeping the key intercepted.
         now = time.monotonic()
         if now - self._last_trigger < _DEBOUNCE_SECONDS:
-            return event
+            return None
         self._last_trigger = now
 
         logger.debug("%s hotkey triggered", self._hotkey_name)
@@ -138,7 +142,8 @@ class GlobalHotkeyListener:
         except Exception:
             logger.exception("Hotkey callback error")
 
-        return event
+        # Swallow the hotkey so other applications don't receive it.
+        return None
 
     # -- public API --------------------------------------------------------
 
@@ -195,11 +200,12 @@ class GlobalHotkeyListener:
         try:
             mask = 1 << kCGEventKeyDown
 
-            # 1 = kCGEventTapOptionListenOnly — we observe but never block input.
+            # 0 = kCGEventTapOptionDefault — active tap; callback may swallow
+            # events by returning None.
             tap = CGEventTapCreate(
                 kCGSessionEventTap,
                 kCGHeadInsertEventTap,
-                1,  # listen-only
+                0,
                 mask,
                 self._callback,
                 None,
@@ -208,7 +214,7 @@ class GlobalHotkeyListener:
             if tap is None:
                 self._start_error = (
                     "Failed to create CGEventTap — "
-                    "grant Accessibility permission in System Preferences → "
+                    "grant Accessibility permission in System Settings → "
                     "Privacy & Security → Accessibility"
                 )
                 logger.error(self._start_error)

@@ -55,7 +55,7 @@ uv run minidic
 
 2. In the menu bar app, click **Start daemon** (or **Stop daemon** to stop it).
 
-3. Press `F5` to toggle start/stop dictation.
+3. Press `F5` to toggle start/stop dictation (captured globally; other apps will not receive `F5` while daemon is running).
 
 Other useful commands:
 
