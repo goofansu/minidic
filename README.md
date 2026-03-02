@@ -18,7 +18,7 @@ High-level pipeline:
 2. Resample to 16 kHz with `soxr` (when needed)
 3. Transcribe with `parakeet-mlx` on-device (Apple Silicon / MLX stack)
 4. Optionally clean filler words (`um`, `uh`, etc.)
-5. If `GEMINI_API_KEY` is set, smooth final transcript with Gemini (`gemini-2.5-flash`, thinking disabled)
+5. Optionally smooth final transcript with Gemini (`gemini-2.5-flash`, thinking disabled)
 6. Inject text into the active app on macOS
 
 The daemon mode is hotkey-driven (press to start/stop recording), and it lazily loads/unloads the model to keep resource usage low when idle.
@@ -62,11 +62,12 @@ Other useful commands:
 
 ```bash
 uv run minidic transcribe path/to/file.wav
+uv run minidic --gemini transcribe path/to/file.wav
 ```
 
 ## Notes
 
 - macOS permissions (microphone/accessibility) are required for full functionality.
-- Set `GEMINI_API_KEY` to enable optional transcript smoothing via Gemini.
-- Recordings and logs are stored under `~/.minidic/`.
-- PID and runtime state files are stored under `~/.local/state/minidic/`.
+- Set `GEMINI_API_KEY` and pass `--gemini` to enable transcript smoothing via Gemini.
+- Recordings are stored under `~/.minidic/`.
+- Logs, PID, and runtime state files are stored under `~/.local/state/minidic/`.

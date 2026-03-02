@@ -25,6 +25,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("-v", "--verbose", action="store_true", help="Enable debug logging")
     p.add_argument("--model", default=DEFAULT_MODEL, help="HuggingFace model id (default: %(default)s)")
     p.add_argument("--duration", type=float, default=60, help="Max recording duration in seconds (default: 60)")
+    p.add_argument(
+        "--gemini",
+        action="store_true",
+        help="Enable Gemini transcript smoothing (requires GEMINI_API_KEY)",
+    )
 
     sub = p.add_subparsers(dest="command")
     sub.add_parser("start", help="Start the dictation daemon in the background")

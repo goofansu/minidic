@@ -71,7 +71,7 @@ def setup_logging(verbose: bool, *, to_file: bool = False) -> None:
 def run_interactive(args: argparse.Namespace) -> None:
     setup_logging(args.verbose)
 
-    transcriber = Transcriber(model_id=args.model)
+    transcriber = Transcriber(model_id=args.model, smooth_with_gemini=args.gemini)
     print(f"Loading ASR model ({args.model}) …", flush=True)
     transcriber.load()
     print("ASR model ready.", flush=True)
@@ -296,7 +296,7 @@ def cmd_transcribe(args: argparse.Namespace) -> None:
     duration = len(audio_f32) / TARGET_RATE
     print(f"Transcribing {duration:.1f}s of audio …", file=sys.stderr, flush=True)
 
-    transcriber = Transcriber(model_id=args.model)
+    transcriber = Transcriber(model_id=args.model, smooth_with_gemini=args.gemini)
     transcriber.load()
 
     text = transcriber.transcribe(audio_f32)

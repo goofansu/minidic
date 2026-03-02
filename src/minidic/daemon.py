@@ -56,7 +56,7 @@ def run_daemon(args: argparse.Namespace) -> None:
 
     signal.signal(signal.SIGTERM, _on_sigterm)
 
-    transcriber = Transcriber(model_id=args.model)
+    transcriber = Transcriber(model_id=args.model, smooth_with_gemini=args.gemini)
     model_loaded = False
     last_model_use: float | None = None
     model_lock = threading.Lock()

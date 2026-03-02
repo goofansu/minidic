@@ -33,7 +33,7 @@ class Transcriber:
         model_id: str = DEFAULT_MODEL,
         *,
         strip_fillers: bool = True,
-        smooth_with_gemini: bool = True,
+        smooth_with_gemini: bool = False,
     ) -> None:
         self.model_id = model_id
         self.strip_fillers = strip_fillers

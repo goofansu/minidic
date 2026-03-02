@@ -15,8 +15,8 @@ _STATE_DIR = Path.home() / ".local" / "state" / "minidic"
 
 DAEMON_PID_FILE = _STATE_DIR / "daemon.pid"
 MENUBAR_PID_FILE = _STATE_DIR / "menubar.pid"
-DAEMON_LOG_FILE = _MINIDIC_DIR / "daemon.log"
-MENUBAR_LOG_FILE = _MINIDIC_DIR / "menubar.log"
+DAEMON_LOG_FILE = _STATE_DIR / "daemon.log"
+MENUBAR_LOG_FILE = _STATE_DIR / "menubar.log"
 DAEMON_STATE_FILE = _STATE_DIR / "daemon.state"
 
 
@@ -70,6 +70,8 @@ def build_minidic_command(args: argparse.Namespace, subcommand: str) -> list[str
     cmd = [sys.executable, "-m", "minidic"]
     if args.verbose:
         cmd.append("--verbose")
+    if args.gemini:
+        cmd.append("--gemini")
     cmd.extend(["--model", args.model, "--duration", str(args.duration), subcommand])
     return cmd
 
