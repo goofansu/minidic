@@ -1,2 +1,2 @@
 install:
-	uv tool install --from . minidic
+	uv tool install --reinstall --from . minidic

@@ -67,3 +67,4 @@ uv run minidic transcribe path/to/file.wav
 
 - macOS permissions (microphone/accessibility) are required for full functionality.
 - Recordings and logs are stored under `~/.minidic/`.
+- PID and runtime state files are stored under `~/.local/state/minidic/`.

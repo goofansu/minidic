@@ -24,11 +24,12 @@ from minidic.transcribe import DEFAULT_MODEL, Transcriber
 logger = logging.getLogger(__name__)
 
 _MINIDIC_DIR = Path.home() / ".minidic"
-_PID_FILE = _MINIDIC_DIR / "daemon.pid"
+_STATE_DIR = Path.home() / ".local" / "state" / "minidic"
+_PID_FILE = _STATE_DIR / "daemon.pid"
 _LOG_FILE = _MINIDIC_DIR / "daemon.log"
-_MENUBAR_PID_FILE = _MINIDIC_DIR / "menubar.pid"
+_MENUBAR_PID_FILE = _STATE_DIR / "menubar.pid"
 _MENUBAR_LOG_FILE = _MINIDIC_DIR / "menubar.log"
-_STATE_FILE = _MINIDIC_DIR / "daemon.state"
+_STATE_FILE = _STATE_DIR / "daemon.state"
 _MODEL_IDLE_UNLOAD_SECONDS = 30 * 60
 
 
@@ -268,6 +269,7 @@ def cmd_start(args: argparse.Namespace) -> None:
         sys.exit(1)
 
     _MINIDIC_DIR.mkdir(parents=True, exist_ok=True)
+    _STATE_DIR.mkdir(parents=True, exist_ok=True)
 
     # Build command for the hidden _daemon subcommand.
     # Global options (--verbose, --model, --duration)
@@ -326,6 +328,7 @@ def cmd_daemon(args: argparse.Namespace) -> None:
     appearance as the readiness signal.
     """
     _MINIDIC_DIR.mkdir(parents=True, exist_ok=True)
+    _STATE_DIR.mkdir(parents=True, exist_ok=True)
     _setup_logging(args.verbose, to_file=True)
 
     try:
@@ -624,6 +627,7 @@ def cmd_menubar(args: argparse.Namespace) -> None:
         sys.exit(1)
 
     _MINIDIC_DIR.mkdir(parents=True, exist_ok=True)
+    _STATE_DIR.mkdir(parents=True, exist_ok=True)
 
     cmd = [sys.executable, "-m", "minidic"]
     if args.verbose:
@@ -695,6 +699,7 @@ def cmd_menubar_foreground(args: argparse.Namespace) -> None:
         sys.exit(1)
 
     _MINIDIC_DIR.mkdir(parents=True, exist_ok=True)
+    _STATE_DIR.mkdir(parents=True, exist_ok=True)
     _MENUBAR_PID_FILE.write_text(str(os.getpid()))
     try:
         run_menubar(args)

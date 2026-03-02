@@ -33,9 +33,11 @@ from AppKit import (
 from Foundation import NSObject, NSTimer
 
 _MINIDIC_DIR = Path.home() / ".minidic"
-_PID_FILE = _MINIDIC_DIR / "daemon.pid"
+_STATE_DIR = Path.home() / ".local" / "state" / "minidic"
+_PID_FILE = _STATE_DIR / "daemon.pid"
+_MENUBAR_PID_FILE = _STATE_DIR / "menubar.pid"
 _LOG_FILE = _MINIDIC_DIR / "daemon.log"
-_STATE_FILE = _MINIDIC_DIR / "daemon.state"
+_STATE_FILE = _STATE_DIR / "daemon.state"
 
 
 def _is_minidic_process(pid: int) -> bool:
@@ -186,6 +188,7 @@ class MiniDicMenuBarApp(NSObject):
         if self.overlay_window is not None:
             self.overlay_window.orderOut_(None)
             self.overlay_window = None
+        _MENUBAR_PID_FILE.unlink(missing_ok=True)
 
     def refreshStatus_(self, timer: object) -> None:
         state, pid, detail = _infer_daemon_state()
