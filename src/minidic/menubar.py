@@ -90,6 +90,7 @@ class MiniDicMenuBarApp(NSObject):
         self.last_runtime_state = "stopped"
         self.overlay_window = None
         self.overlay_timer = None
+        self.transcribing_overlay_visible = False
 
         return self
 
@@ -166,12 +167,36 @@ class MiniDicMenuBarApp(NSObject):
             self.toggle_daemon_item.setTitle_("Stop daemon")
             runtime_state = read_runtime_state()
 
+        if runtime_state == "transcribing":
+            self.showTranscribingOverlay_(None)
+        elif self.last_runtime_state == "transcribing" and runtime_state != "transcribing":
+            self.hideTranscribingOverlay_(None)
+
         if runtime_state == "recording" and self.last_runtime_state != "recording":
             self.showDictationOverlay_("🎙️ Dictation started")
-        elif self.last_runtime_state == "recording" and runtime_state != "recording":
+        elif (
+            self.last_runtime_state == "recording"
+            and runtime_state == "idle"
+        ):
             self.showDictationOverlay_("Dictation stopped")
 
         self.last_runtime_state = runtime_state
+
+    def showTranscribingOverlay_(self, sender: object) -> None:
+        if self.transcribing_overlay_visible:
+            return
+
+        self.transcribing_overlay_visible = True
+        self.showDictationOverlay_("⏳ Transcribing")
+
+        # Keep overlay visible for the entire transcription phase.
+        if self.overlay_timer is not None:
+            self.overlay_timer.invalidate()
+            self.overlay_timer = None
+
+    def hideTranscribingOverlay_(self, sender: object) -> None:
+        self.transcribing_overlay_visible = False
+        self.hideOverlay_(None)
 
     def showDictationOverlay_(self, message: str) -> None:
         if self.overlay_timer is not None:
