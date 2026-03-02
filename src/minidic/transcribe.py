@@ -39,7 +39,8 @@ class Transcriber:
         self.strip_fillers = strip_fillers
         self._model: parakeet_mlx.BaseParakeet | None = None
         self._regex_smoother = RegexSmoother() if strip_fillers else None
-        self._smoother = GeminiSmoother() if smooth_with_gemini else None
+        self._gemini_enabled = smooth_with_gemini
+        self._smoother: GeminiSmoother | None = GeminiSmoother() if smooth_with_gemini else None
 
     def load(self) -> None:
         """Load the ASR model (downloads on first run, ~2 GB)."""
@@ -100,6 +101,15 @@ class Transcriber:
         mx.clear_cache()
         logger.info("ASR model unloaded")
 
+    def set_gemini_enabled(self, enabled: bool) -> None:
+        enabled = bool(enabled)
+        if enabled == self._gemini_enabled:
+            return
+
+        self._gemini_enabled = enabled
+        if not enabled:
+            self._smoother = None
+
     @property
     def model(self) -> parakeet_mlx.BaseParakeet:
         if self._model is None:
@@ -125,7 +135,9 @@ class Transcriber:
             text = stream.result.text.strip()
             if self._regex_smoother is not None:
                 text = self._regex_smoother.smooth(text)
-            if self._smoother is not None:
+            if self._gemini_enabled:
+                if self._smoother is None:
+                    self._smoother = GeminiSmoother()
                 text = self._smoother.smooth(text)
             return text
 

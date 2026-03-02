@@ -29,6 +29,7 @@ from AppKit import (
 )
 from Foundation import NSMakeRect, NSObject, NSTimer
 
+from minidic.runtime.config import get_gemini_enabled, set_gemini_enabled
 from minidic.runtime.process import (
     DAEMON_LOG_FILE,
     build_minidic_command,
@@ -86,6 +87,7 @@ class MiniDicMenuBarApp(NSObject):
 
         self.status_label_item = None
         self.toggle_daemon_item = None
+        self.toggle_gemini_item = None
 
         self.last_runtime_state = "stopped"
         self.overlay_window = None
@@ -113,6 +115,12 @@ class MiniDicMenuBarApp(NSObject):
         )
         self.toggle_daemon_item.setTarget_(self)
         self.menu.addItem_(self.toggle_daemon_item)
+
+        self.toggle_gemini_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+            "Gemini mode", "toggleGemini:", ""
+        )
+        self.toggle_gemini_item.setTarget_(self)
+        self.menu.addItem_(self.toggle_gemini_item)
 
         open_log_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
             "Open log", "openLog:", ""
@@ -166,6 +174,10 @@ class MiniDicMenuBarApp(NSObject):
             self.status_label_item.setTitle_(f"Status: {detail} (pid {pid})")
             self.toggle_daemon_item.setTitle_("Stop daemon")
             runtime_state = read_runtime_state()
+
+        gemini_enabled = get_gemini_enabled(default=self.args.gemini)
+        if self.toggle_gemini_item is not None:
+            self.toggle_gemini_item.setState_(1 if gemini_enabled else 0)
 
         if runtime_state == "transcribing":
             self.showTranscribingOverlay_(None)
@@ -301,6 +313,11 @@ class MiniDicMenuBarApp(NSObject):
         subcommand = "stop" if read_daemon_pid() is not None else "start"
         cmd = build_minidic_command(self.args, subcommand)
         spawn_detached(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        self.refreshStatus_(None)
+
+    def toggleGemini_(self, sender: object) -> None:
+        enabled = get_gemini_enabled(default=self.args.gemini)
+        set_gemini_enabled(not enabled)
         self.refreshStatus_(None)
 
     def openLog_(self, sender: object) -> None:

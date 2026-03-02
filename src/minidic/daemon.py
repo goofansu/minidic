@@ -16,6 +16,7 @@ import numpy as np
 
 from minidic.audio import AudioStream, TARGET_RATE, int16_to_float32
 from minidic.inject import inject_text
+from minidic.runtime.config import get_gemini_enabled, write_runtime_config
 from minidic.runtime.process import DAEMON_PID_FILE, clear_runtime_state, write_runtime_state
 from minidic.transcribe import Transcriber
 
@@ -56,7 +57,10 @@ def run_daemon(args: argparse.Namespace) -> None:
 
     signal.signal(signal.SIGTERM, _on_sigterm)
 
-    transcriber = Transcriber(model_id=args.model, smooth_with_gemini=args.gemini)
+    gemini_enabled = get_gemini_enabled(default=args.gemini)
+    write_runtime_config({"gemini": gemini_enabled})
+
+    transcriber = Transcriber(model_id=args.model, smooth_with_gemini=gemini_enabled)
     model_loaded = False
     last_model_use: float | None = None
     model_lock = threading.Lock()
@@ -151,6 +155,9 @@ def run_daemon(args: argparse.Namespace) -> None:
                     transcriber.load()
                     model_loaded = True
                     logger.info("ASR model ready.")
+
+                gemini_now = get_gemini_enabled(default=args.gemini)
+                transcriber.set_gemini_enabled(gemini_now)
 
                 text = transcriber.transcribe(audio_f32)
                 last_model_use = time.monotonic()
