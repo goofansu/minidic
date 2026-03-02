@@ -1,12 +1,9 @@
-"""Menu bar app for minidic daemon status/control on macOS."""
+"""Menu bar UI for minidic daemon status/control on macOS."""
 
 from __future__ import annotations
 
 import argparse
-import os
 import subprocess
-import sys
-from pathlib import Path
 
 from AppKit import (
     NSAnimationContext,
@@ -32,56 +29,19 @@ from AppKit import (
 )
 from Foundation import NSMakeRect, NSObject, NSTimer
 
-_MINIDIC_DIR = Path.home() / ".minidic"
-_STATE_DIR = Path.home() / ".local" / "state" / "minidic"
-_PID_FILE = _STATE_DIR / "daemon.pid"
-_MENUBAR_PID_FILE = _STATE_DIR / "menubar.pid"
-_LOG_FILE = _MINIDIC_DIR / "daemon.log"
-_STATE_FILE = _STATE_DIR / "daemon.state"
-
-
-def _is_minidic_process(pid: int) -> bool:
-    try:
-        os.kill(pid, 0)
-    except OSError:
-        return False
-    try:
-        out = subprocess.check_output(
-            ["ps", "-p", str(pid), "-o", "command="],
-            text=True,
-            stderr=subprocess.DEVNULL,
-        ).strip()
-        return "-m minidic" in out and "_daemon" in out
-    except (OSError, subprocess.CalledProcessError):
-        return False
-
-
-def _read_pid() -> int | None:
-    if not _PID_FILE.exists():
-        return None
-    try:
-        pid = int(_PID_FILE.read_text().strip())
-    except (ValueError, OSError):
-        return None
-    if not _is_minidic_process(pid):
-        _PID_FILE.unlink(missing_ok=True)
-        return None
-    return pid
-
-
-def _read_runtime_state() -> str:
-    try:
-        state = _STATE_FILE.read_text().strip().lower()
-    except OSError:
-        return "idle"
-    return state if state in {"idle", "recording", "transcribing"} else "idle"
+from minidic.runtime.process import (
+    DAEMON_LOG_FILE,
+    build_minidic_command,
+    ensure_runtime_dirs,
+    read_daemon_pid,
+    read_runtime_state,
+    spawn_detached,
+)
 
 
 def _infer_daemon_state() -> tuple[str, int | None, str]:
-    """Return (state, pid, detail)."""
-    pid = _read_pid()
+    pid = read_daemon_pid()
     if pid is None:
-        _STATE_FILE.unlink(missing_ok=True)
         return "stopped", None, "Daemon is not running"
     return "running", pid, "Running"
 
@@ -188,7 +148,6 @@ class MiniDicMenuBarApp(NSObject):
         if self.overlay_window is not None:
             self.overlay_window.orderOut_(None)
             self.overlay_window = None
-        _MENUBAR_PID_FILE.unlink(missing_ok=True)
 
     def refreshStatus_(self, timer: object) -> None:
         state, pid, detail = _infer_daemon_state()
@@ -205,7 +164,7 @@ class MiniDicMenuBarApp(NSObject):
         else:
             self.status_label_item.setTitle_(f"Status: {detail} (pid {pid})")
             self.toggle_daemon_item.setTitle_("Stop daemon")
-            runtime_state = _read_runtime_state()
+            runtime_state = read_runtime_state()
 
         if runtime_state == "recording" and self.last_runtime_state != "recording":
             self.showDictationOverlay_("🎙️ Dictation started")
@@ -248,7 +207,6 @@ class MiniDicMenuBarApp(NSObject):
                 | NSWindowCollectionBehaviorFullScreenAuxiliary
             )
 
-            # Dark rounded HUD
             content = self.overlay_window.contentView()
             content.setWantsLayer_(True)
             content.layer().setCornerRadius_(10.0)
@@ -314,37 +272,16 @@ class MiniDicMenuBarApp(NSObject):
         NSAnimationContext.runAnimationGroup_completionHandler_(_fade_out, _finish)
         self.overlay_timer = None
 
-    def buildCommandForSubcommand_(self, subcommand: str) -> list[str]:
-        cmd = [sys.executable, "-m", "minidic"]
-        if self.args.verbose:
-            cmd.append("--verbose")
-        cmd.extend(
-            [
-                "--model",
-                self.args.model,
-                "--duration",
-                str(self.args.duration),
-            ]
-        )
-        cmd.append(subcommand)
-        return cmd
-
     def toggleDaemon_(self, sender: object) -> None:
-        subcommand = "stop" if _read_pid() is not None else "start"
-        devnull = open(os.devnull, "r+b")
-        subprocess.Popen(
-            self.buildCommandForSubcommand_(subcommand),
-            stdin=devnull,
-            stdout=devnull,
-            stderr=devnull,
-            start_new_session=True,
-        )
+        subcommand = "stop" if read_daemon_pid() is not None else "start"
+        cmd = build_minidic_command(self.args, subcommand)
+        spawn_detached(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         self.refreshStatus_(None)
 
     def openLog_(self, sender: object) -> None:
-        _MINIDIC_DIR.mkdir(parents=True, exist_ok=True)
-        _LOG_FILE.touch(exist_ok=True)
-        subprocess.run(["open", str(_LOG_FILE)], check=False)
+        ensure_runtime_dirs()
+        DAEMON_LOG_FILE.touch(exist_ok=True)
+        subprocess.run(["open", str(DAEMON_LOG_FILE)], check=False)
 
     def quitApp_(self, sender: object) -> None:
         NSApp.terminate_(None)
