@@ -30,7 +30,7 @@ from AppKit import (
     NSWindowCollectionBehaviorFullScreenAuxiliary,
     NSWindowStyleMaskBorderless,
 )
-from Foundation import NSObject, NSTimer
+from Foundation import NSMakeRect, NSObject, NSTimer
 
 _MINIDIC_DIR = Path.home() / ".minidic"
 _STATE_DIR = Path.home() / ".local" / "state" / "minidic"
@@ -208,17 +208,19 @@ class MiniDicMenuBarApp(NSObject):
             runtime_state = _read_runtime_state()
 
         if runtime_state == "recording" and self.last_runtime_state != "recording":
-            self.showDictationOverlay()
+            self.showDictationOverlay_("🎙️ Dictation started")
+        elif self.last_runtime_state == "recording" and runtime_state != "recording":
+            self.showDictationOverlay_("Dictation stopped")
 
         self.last_runtime_state = runtime_state
 
-    def showDictationOverlay(self) -> None:
+    def showDictationOverlay_(self, message: str) -> None:
         if self.overlay_timer is not None:
             self.overlay_timer.invalidate()
             self.overlay_timer = None
 
-        width = 320
-        height = 72
+        width = 200
+        height = 44
 
         target_screen = NSScreen.mainScreen()
         if target_screen is None:
@@ -238,9 +240,7 @@ class MiniDicMenuBarApp(NSObject):
             )
             self.overlay_window.setLevel_(NSStatusWindowLevel)
             self.overlay_window.setOpaque_(False)
-            self.overlay_window.setBackgroundColor_(
-                NSColor.colorWithCalibratedWhite_alpha_(0.05, 0.85)
-            )
+            self.overlay_window.setBackgroundColor_(NSColor.clearColor())
             self.overlay_window.setIgnoresMouseEvents_(True)
             self.overlay_window.setHasShadow_(True)
             self.overlay_window.setCollectionBehavior_(
@@ -248,21 +248,38 @@ class MiniDicMenuBarApp(NSObject):
                 | NSWindowCollectionBehaviorFullScreenAuxiliary
             )
 
-            label = NSTextField.alloc().initWithFrame_(((16, 16), (width - 32, height - 32)))
-            label.setEditable_(False)
-            label.setBezeled_(False)
-            label.setDrawsBackground_(False)
-            label.setSelectable_(False)
+            # Dark rounded HUD
+            content = self.overlay_window.contentView()
+            content.setWantsLayer_(True)
+            content.layer().setCornerRadius_(10.0)
+            content.layer().setMasksToBounds_(True)
+            content.layer().setBackgroundColor_(
+                NSColor.colorWithCalibratedWhite_alpha_(0.08, 0.88).CGColor()
+            )
+
+            font = NSFont.systemFontOfSize_weight_(13.0, 0.3)
+            label_h = 20
+            label_y = (height - label_h) / 2
+            label = NSTextField.alloc().initWithFrame_(
+                NSMakeRect(12, label_y, width - 24, label_h)
+            )
             label.setAlignment_(NSTextAlignmentCenter)
             label.setTextColor_(NSColor.whiteColor())
-            label.setFont_(NSFont.boldSystemFontOfSize_(24.0))
-            label.setStringValue_("🎙️ Dictation started")
-            self.overlay_window.contentView().addSubview_(label)
+            label.setFont_(font)
+            label.setDrawsBackground_(False)
+            label.setBezeled_(False)
+            label.setEditable_(False)
+            label.setSelectable_(False)
+            label.setStringValue_(message)
+            content.addSubview_(label)
         else:
             self.overlay_window.setFrame_display_(((x, y), (width, height)), True)
+            label_h = 20
+            label_y = (height - label_h) / 2
             for view in self.overlay_window.contentView().subviews():
                 if isinstance(view, NSTextField):
-                    view.setStringValue_("🎙️ Dictation started")
+                    view.setFrame_(NSMakeRect(12, label_y, width - 24, label_h))
+                    view.setStringValue_(message)
 
         self.overlay_window.setAlphaValue_(0.0)
         self.overlay_window.orderFrontRegardless()
