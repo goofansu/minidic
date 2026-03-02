@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import logging
 import os
-import subprocess
 import sys
 import time
 import wave
@@ -23,10 +22,8 @@ from minidic.runtime.process import (
     build_minidic_command,
     clear_runtime_state,
     ensure_runtime_dirs,
-    read_daemon_pid,
     read_menubar_pid,
     spawn_detached,
-    stop_pid,
 )
 from minidic.transcribe import Transcriber
 
@@ -119,35 +116,6 @@ def run_interactive(args: argparse.Namespace) -> None:
         print("\nBye.", flush=True)
 
 
-def cmd_start(args: argparse.Namespace) -> None:
-    existing = read_daemon_pid()
-    if existing is not None:
-        print(f"Daemon already running (pid {existing}).", flush=True)
-        sys.exit(1)
-
-    ensure_runtime_dirs()
-    cmd = build_minidic_command(args, "_daemon")
-    proc = spawn_detached(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-
-    start_time = time.monotonic()
-    notified = False
-    while True:
-        rc = proc.poll()
-        if rc is not None:
-            print(
-                f"Daemon failed to start (exit code {rc}). Check log: {DAEMON_LOG_FILE}",
-                flush=True,
-            )
-            sys.exit(1)
-        if DAEMON_PID_FILE.exists():
-            print(f"Daemon started (pid {proc.pid}). Log: {DAEMON_LOG_FILE}", flush=True)
-            return
-        if not notified and time.monotonic() - start_time > 3:
-            print("Waiting for daemon to initialize …", flush=True)
-            notified = True
-        time.sleep(0.2)
-
-
 def cmd_daemon_foreground(args: argparse.Namespace) -> None:
     ensure_runtime_dirs()
     setup_logging(args.verbose, to_file=True)
@@ -160,28 +128,6 @@ def cmd_daemon_foreground(args: argparse.Namespace) -> None:
     finally:
         DAEMON_PID_FILE.unlink(missing_ok=True)
         clear_runtime_state()
-
-
-def cmd_stop(args: argparse.Namespace) -> None:
-    pid = read_daemon_pid()
-    if pid is None:
-        print("No daemon to stop.", flush=True)
-        return
-
-    if not stop_pid(pid, timeout_seconds=5.0):
-        print(f"Daemon (pid {pid}) did not exit within 5s.", flush=True)
-        sys.exit(1)
-
-    DAEMON_PID_FILE.unlink(missing_ok=True)
-    print(f"Daemon stopped (pid {pid}).", flush=True)
-
-
-def cmd_status(args: argparse.Namespace) -> None:
-    pid = read_daemon_pid()
-    if pid is None:
-        print("Daemon is not running.", flush=True)
-    else:
-        print(f"Daemon is running (pid {pid}).", flush=True)
 
 
 def cmd_menubar(args: argparse.Namespace) -> None:

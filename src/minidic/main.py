@@ -8,56 +8,73 @@ from minidic.handlers import (
     cmd_daemon_foreground,
     cmd_menubar,
     cmd_menubar_foreground,
-    cmd_start,
-    cmd_status,
-    cmd_stop,
     cmd_transcribe,
     run_interactive,
 )
 from minidic.transcribe import DEFAULT_MODEL
 
 
-def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    p = argparse.ArgumentParser(
-        prog="minidic",
-        description="Real-time voice dictation for macOS",
-    )
-    p.add_argument("-v", "--verbose", action="store_true", help="Enable debug logging")
-    p.add_argument("--model", default=DEFAULT_MODEL, help="HuggingFace model id (default: %(default)s)")
-    p.add_argument("--duration", type=float, default=60, help="Max recording duration in seconds (default: 60)")
-    p.add_argument(
+def _add_common_options(parser: argparse.ArgumentParser, *, include_duration: bool) -> None:
+    parser.add_argument("-v", "--verbose", action="store_true", help="Enable debug logging")
+    parser.add_argument("--model", default=DEFAULT_MODEL, help="HuggingFace model id (default: %(default)s)")
+    parser.add_argument(
         "--gemini",
         action="store_true",
         help="Enable Gemini transcript smoothing (requires GEMINI_API_KEY)",
     )
+    if include_duration:
+        parser.add_argument(
+            "--duration",
+            type=float,
+            default=60,
+            help="Max recording duration in seconds (default: 60)",
+        )
 
-    sub = p.add_subparsers(dest="command")
-    sub.add_parser("start", help="Start the dictation daemon in the background")
-    sub.add_parser("stop", help="Stop the running daemon")
-    sub.add_parser("status", help="Show daemon status")
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    p = argparse.ArgumentParser(
+        prog="minidic",
+        description="Voice dictation for macOS",
+    )
+
+    sub = p.add_subparsers(dest="command", metavar="{console,menubar,transcribe}")
+
+    sp_console = sub.add_parser("console", help="Run interactive console dictation")
+    _add_common_options(sp_console, include_duration=True)
+
+    sp_menubar = sub.add_parser("menubar", help="Launch menu bar status app in background")
+    sp_menubar.add_argument("-v", "--verbose", action="store_true", help="Enable debug logging")
+    sp_menubar.set_defaults(model=DEFAULT_MODEL, gemini=False, duration=60)
 
     sp_transcribe = sub.add_parser("transcribe", help="Transcribe a WAV file")
+    _add_common_options(sp_transcribe, include_duration=False)
     sp_transcribe.add_argument("file", help="Path to WAV file")
 
-    sub.add_parser("menubar", help="Launch menu bar status app in background")
-    sub.add_parser("_menubar")
-    sub.add_parser("_daemon")
+    sp_menubar_fg = sub.add_parser("_menubar")
+    _add_common_options(sp_menubar_fg, include_duration=True)
+
+    sp_daemon_fg = sub.add_parser("_daemon")
+    _add_common_options(sp_daemon_fg, include_duration=True)
+
+    sub._choices_actions = [a for a in sub._choices_actions if not a.dest.startswith("_")]
     return p.parse_args(argv)
 
 
 def main() -> None:
     args = parse_args()
     dispatch = {
-        "start": cmd_start,
-        "stop": cmd_stop,
-        "status": cmd_status,
+        "console": run_interactive,
         "transcribe": cmd_transcribe,
         "menubar": cmd_menubar,
         "_menubar": cmd_menubar_foreground,
         "_daemon": cmd_daemon_foreground,
-        None: run_interactive,
     }
-    dispatch[args.command](args)
+
+    handler = dispatch.get(args.command)
+    if handler is None:
+        return
+
+    handler(args)
 
 
 if __name__ == "__main__":

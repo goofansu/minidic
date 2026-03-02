@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import subprocess
+import time
 
 from AppKit import (
     NSAnimationContext,
@@ -32,11 +33,13 @@ from Foundation import NSMakeRect, NSObject, NSTimer
 from minidic.runtime.config import get_gemini_enabled, set_gemini_enabled
 from minidic.runtime.process import (
     DAEMON_LOG_FILE,
+    DAEMON_PID_FILE,
     build_minidic_command,
     ensure_runtime_dirs,
     read_daemon_pid,
     read_runtime_state,
     spawn_detached,
+    stop_pid,
 )
 
 
@@ -310,9 +313,22 @@ class MiniDicMenuBarApp(NSObject):
         self.overlay_timer = None
 
     def toggleDaemon_(self, sender: object) -> None:
-        subcommand = "stop" if read_daemon_pid() is not None else "start"
-        cmd = build_minidic_command(self.args, subcommand)
+        pid = read_daemon_pid()
+        if pid is not None:
+            if stop_pid(pid, timeout_seconds=5.0):
+                DAEMON_PID_FILE.unlink(missing_ok=True)
+            self.refreshStatus_(None)
+            return
+
+        cmd = build_minidic_command(self.args, "_daemon")
         spawn_detached(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+        deadline = time.monotonic() + 3.0
+        while time.monotonic() < deadline:
+            if read_daemon_pid() is not None:
+                break
+            time.sleep(0.1)
+
         self.refreshStatus_(None)
 
     def toggleGemini_(self, sender: object) -> None:

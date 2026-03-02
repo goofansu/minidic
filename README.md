@@ -6,8 +6,10 @@ A tiny **vibe coding** project for voice dictation on macOS — built as a perso
 
 ```bash
 uv tool install --from "git+https://github.com/goofansu/minidic.git" minidic
-minidic # it'll download mlx-community/parakeet-tdt-0.6b-v3 for the first time
+minidic console
 ```
+
+The first run will download `mlx-community/parakeet-tdt-0.6b-v3`.
 
 `uv tool` installs `minidic` to `~/.local/bin/minidic`.
 Make sure `~/.local/bin` is on your `PATH`.
@@ -36,8 +38,10 @@ uv tool install --reinstall --from "git+https://github.com/goofansu/minidic.git"
 Other useful commands:
 
 ```bash
+minidic console
+minidic console --gemini
 minidic transcribe path/to/file.wav
-minidic --gemini transcribe path/to/file.wav
+minidic transcribe --gemini path/to/file.wav
 ```
 
 ## Technique overview
@@ -50,7 +54,7 @@ High-level pipeline:
 2. Resample to 16 kHz with `soxr` (when needed)
 3. Transcribe with `parakeet-mlx` on-device (Apple Silicon / MLX stack)
 4. Smooth transcription by default with local regex cleanup (remove filler words like `um`, `uh`, etc.)
-5. Further smooth with Gemini (`gemini-2.5-flash`, thinking disabled) when `GEMINI_API_KEY` is set and `--gemini` is passed
+5. Further smooth with Gemini (`gemini-2.5-flash`, thinking disabled) when `GEMINI_API_KEY` is set and Gemini mode is enabled (via `--gemini` for `console`/`transcribe`, or via the menu bar toggle)
 6. Inject text into the active app on macOS
 
 The daemon mode is hotkey-driven and lazily loads/unloads the model to reduce idle resource usage.
