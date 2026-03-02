@@ -11,8 +11,6 @@ import mlx.core as mx
 import numpy as np
 import parakeet_mlx
 
-from minidic.audio import TARGET_RATE as SAMPLE_RATE
-
 logger = logging.getLogger(__name__)
 
 DEFAULT_MODEL = "mlx-community/parakeet-tdt-0.6b-v3"
