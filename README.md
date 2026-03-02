@@ -1,46 +1,21 @@
 # minidic
 
-A tiny **vibe coding** project for voice dictation on macOS.
-
-## What this project is
-
-- Built as a personal, experimental tool with fast iteration.
-- Intended to **run locally** on one machine.
-- **Not planned for packaging/distribution** as a polished application.
-
-## Technique overview
-
-`minidic` captures microphone audio, normalizes it to 16 kHz, and runs local speech-to-text with streaming-style decoding.
-
-High-level pipeline:
-
-1. Capture mic audio with `sounddevice`
-2. Resample to 16 kHz with `soxr` (when needed)
-3. Transcribe with `parakeet-mlx` on-device (Apple Silicon / MLX stack)
-4. Optionally clean filler words (`um`, `uh`, etc.)
-5. Optionally smooth final transcript with Gemini (`gemini-2.5-flash`, thinking disabled)
-6. Inject text into the active app on macOS
-
-The daemon mode is hotkey-driven (press to start/stop recording), and it lazily loads/unloads the model to keep resource usage low when idle.
-
-## Models used
-
-Default ASR model:
-
-- `mlx-community/parakeet-tdt-0.6b-v3`
-
-Model runtime:
-
-- `parakeet-mlx`
-- `mlx`
-
-The model is downloaded on first use (and then reused from local cache).
+A tiny **vibe coding** project for voice dictation on macOS — built as a personal, fast-iteration tool for local use on one machine (not a polished/distributed app).
 
 ## Install
 
 ```bash
-uv sync
-uv run minidic
+uv tool install --from "git+https://github.com/goofansu/minidic.git" minidic
+minidic # it'll download mlx-community/parakeet-tdt-0.6b-v3 for the first time
+```
+
+`uv tool` installs `minidic` to `~/.local/bin/minidic`.
+Make sure `~/.local/bin` is on your `PATH`.
+
+## Upgrade
+
+```bash
+uv tool install --reinstall --from "git+https://github.com/goofansu/minidic.git" minidic
 ```
 
 ## Usage
@@ -48,7 +23,7 @@ uv run minidic
 1. Start menu bar app:
 
    ```bash
-   uv run minidic menubar
+   minidic menubar
    ```
 
    ![Menu bar icon (stopped)](screenshots/menubar-step1-start.png)
@@ -61,13 +36,26 @@ uv run minidic
 Other useful commands:
 
 ```bash
-uv run minidic transcribe path/to/file.wav
-uv run minidic --gemini transcribe path/to/file.wav
+minidic transcribe path/to/file.wav
+minidic --gemini transcribe path/to/file.wav
 ```
 
-## Notes
+## Technique overview
 
-- macOS permissions (microphone/accessibility) are required for full functionality.
-- Set `GEMINI_API_KEY` and pass `--gemini` to enable transcript smoothing via Gemini.
+`minidic` captures microphone audio, normalizes it to 16 kHz, and runs local speech-to-text with streaming-style decoding.
+
+High-level pipeline:
+
+1. Capture mic audio with `sounddevice`
+2. Resample to 16 kHz with `soxr` (when needed)
+3. Transcribe with `parakeet-mlx` on-device (Apple Silicon / MLX stack)
+4. Smooth transcription by default with local regex cleanup (remove filler words like `um`, `uh`, etc.)
+5. Further smooth with Gemini (`gemini-2.5-flash`, thinking disabled) when `GEMINI_API_KEY` is set and `--gemini` is passed
+6. Inject text into the active app on macOS
+
+The daemon mode is hotkey-driven and lazily loads/unloads the model to reduce idle resource usage.
+
+Runtime notes:
+- macOS permissions (microphone/accessibility) are required.
 - Recordings are stored under `~/.minidic/`.
 - Logs, PID, and runtime state files are stored under `~/.local/state/minidic/`.
