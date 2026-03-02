@@ -8,6 +8,7 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
+    "google-genai>=1.0.0",
     "parakeet-mlx>=0.5.1",
     "pyobjc-framework-quartz>=12.1",
     "sounddevice>=0.5.5",

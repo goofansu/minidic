@@ -5,42 +5,18 @@ from __future__ import annotations
 import gc
 import logging
 import os
-import re
 
 import mlx.core as mx
 import numpy as np
 import parakeet_mlx
+
+from minidic.text_processing import GeminiSmoother, RegexSmoother
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_MODEL = "mlx-community/parakeet-tdt-0.6b-v3"
 CONTEXT_SIZE = (256, 256)
 STREAM_DEPTH = 1
-
-# Filler words / hesitation sounds to strip from transcription output.
-# Matched case-insensitively as whole words.
-FILLER_WORDS = frozenset({
-    "um", "uh", "uhh", "umm", "erm", "er", "ah", "ahh",
-    "hm", "hmm", "huh", "mm", "mmm", "mhm",
-})
-
-_FILLER_PATTERN = re.compile(
-    r"\b("
-    + "|".join(re.escape(w) for w in sorted(FILLER_WORDS, key=len, reverse=True))
-    + r")\b[,;]?\s*",
-    re.IGNORECASE,
-)
-
-
-def remove_fillers(text: str) -> str:
-    """Remove filler words (um, uh, etc.) and clean up residual whitespace/punctuation."""
-    # Remove filler words along with any trailing comma/semicolon
-    cleaned = _FILLER_PATTERN.sub(" ", text)
-    # Collapse runs of whitespace
-    cleaned = re.sub(r"  +", " ", cleaned)
-    # Remove leading comma/semicolon (if filler was at sentence start)
-    cleaned = re.sub(r"^\s*[,;]\s*", "", cleaned)
-    return cleaned.strip()
 
 
 class Transcriber:
@@ -52,10 +28,18 @@ class Transcriber:
         Hugging Face model id or local path (default: parakeet-tdt-0.6b-v3).
     """
 
-    def __init__(self, model_id: str = DEFAULT_MODEL, *, strip_fillers: bool = True) -> None:
+    def __init__(
+        self,
+        model_id: str = DEFAULT_MODEL,
+        *,
+        strip_fillers: bool = True,
+        smooth_with_gemini: bool = True,
+    ) -> None:
         self.model_id = model_id
         self.strip_fillers = strip_fillers
         self._model: parakeet_mlx.BaseParakeet | None = None
+        self._regex_smoother = RegexSmoother() if strip_fillers else None
+        self._smoother = GeminiSmoother() if smooth_with_gemini else None
 
     def load(self) -> None:
         """Load the ASR model (downloads on first run, ~2 GB)."""
@@ -139,7 +123,11 @@ class Transcriber:
         with self._open_stream() as stream:
             stream.add_audio(audio_mx)
             text = stream.result.text.strip()
-            return remove_fillers(text) if self.strip_fillers else text
+            if self._regex_smoother is not None:
+                text = self._regex_smoother.smooth(text)
+            if self._smoother is not None:
+                text = self._smoother.smooth(text)
+            return text
 
     def open_stream(self) -> StreamSession:
         """Open a streaming transcription session.
@@ -172,7 +160,7 @@ class StreamSession:
 
     def __init__(self, streamer: parakeet_mlx.StreamingParakeet, *, strip_fillers: bool = True) -> None:
         self._streamer = streamer
-        self._strip_fillers = strip_fillers
+        self._regex_smoother = RegexSmoother() if strip_fillers else None
 
     def __enter__(self) -> StreamSession:
         self._streamer.__enter__()
@@ -186,7 +174,9 @@ class StreamSession:
         self._streamer.add_audio(mx.array(chunk_f32))
 
     def _clean(self, text: str) -> str:
-        return remove_fillers(text) if self._strip_fillers else text
+        if self._regex_smoother is None:
+            return text
+        return self._regex_smoother.smooth(text)
 
     @property
     def finalized_text(self) -> str:
