@@ -67,12 +67,12 @@ def read_menubar_pid() -> int | None:
 
 
 def build_minidic_command(args: argparse.Namespace, subcommand: str) -> list[str]:
-    cmd = [sys.executable, "-m", "minidic"]
+    cmd = [sys.executable, "-m", "minidic", subcommand]
     if args.verbose:
         cmd.append("--verbose")
     if args.gemini:
         cmd.append("--gemini")
-    cmd.extend(["--model", args.model, "--duration", str(args.duration), subcommand])
+    cmd.extend(["--model", args.model, "--duration", str(args.duration)])
     return cmd
 
 
