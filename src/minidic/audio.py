@@ -23,6 +23,30 @@ def int16_to_float32(audio: np.ndarray) -> np.ndarray:
     return audio.astype(np.float32) / 32768.0
 
 
+def _refresh_portaudio() -> None:
+    """Terminate and reinitialize PortAudio to pick up newly connected devices.
+
+    PortAudio captures the device list at initialization time.  Calling
+    Pa_Terminate / Pa_Initialize forces a fresh enumeration so that devices
+    connected after the process started (e.g. Bluetooth headsets, USB mics)
+    are visible to subsequent ``sd.query_devices`` / ``sd.InputStream`` calls.
+
+    Uses the private ``sd._terminate`` / ``sd._initialize`` API — there is no
+    public equivalent.  Both symbols have been stable since sounddevice 0.5.1
+    and the project pins ``sounddevice>=0.5.5``.  If either call raises, the
+    exception is re-raised so the caller receives a clear error rather than a
+    deferred cryptic PortAudio failure (a partial reinit — e.g. terminate
+    succeeded but initialize failed — leaves PortAudio uninitialized and must
+    not be silently swallowed).
+    """
+    try:
+        sd._terminate()
+        sd._initialize()
+    except Exception:
+        logger.warning("PortAudio reinit failed", exc_info=True)
+        raise
+
+
 def _get_device_samplerate(device: int | str | None) -> float:
     """Query the native sample rate for the given input device."""
     info = sd.query_devices(device, kind="input")
@@ -96,13 +120,15 @@ class AudioStream:
         else:
             self._queue.put_nowait(raw)
 
-    # -- public API --------------------------------------------------------
+    # -- internal helpers --------------------------------------------------
 
-    def start(self) -> None:
-        """Open and start the audio stream."""
-        if self._stream is not None:
-            return
+    def _do_open(self) -> None:
+        """Query device info, configure resampling, and open the PortAudio stream.
 
+        Separated from ``start()`` so the try-on-failure retry in ``start()``
+        can call it without duplicating the setup logic.  Caller must ensure
+        ``self._stream is None`` before calling.
+        """
         self._native_rate = _get_device_samplerate(self.device)
         needs_resample = abs(self._native_rate - TARGET_RATE) > 1
 
@@ -120,7 +146,7 @@ class AudioStream:
             self._resampler = None
             native_blocksize = self.blocksize
 
-        self._stream = sd.InputStream(
+        stream = sd.InputStream(
             samplerate=self._native_rate,
             blocksize=native_blocksize,
             device=self.device,
@@ -128,7 +154,12 @@ class AudioStream:
             dtype=DTYPE,
             callback=self._callback,
         )
-        self._stream.start()
+        try:
+            stream.start()
+        except Exception:
+            stream.close()
+            raise
+        self._stream = stream
         logger.info(
             "Audio stream started  native_rate=%d  target_rate=%d  "
             "blocksize=%d  resample=%s  device=%s",
@@ -138,6 +169,31 @@ class AudioStream:
             needs_resample,
             self.device or "default",
         )
+
+    # -- public API --------------------------------------------------------
+
+    def start(self) -> None:
+        """Open and start the audio stream.
+
+        On the first attempt the stream is opened against the current
+        PortAudio device list.  If that fails (e.g. the user connected a new
+        device since the process started and PortAudio's list is stale),
+        PortAudio is reinitialized — which forces CoreAudio to re-enumerate
+        devices — and the open is retried once.  The retry failure propagates
+        to the caller.
+        """
+        if self._stream is not None:
+            return
+
+        try:
+            self._do_open()
+        except Exception as exc:
+            logger.warning(
+                "Audio stream open failed (%s); reinitializing PortAudio and retrying",
+                exc,
+            )
+            _refresh_portaudio()
+            self._do_open()  # propagates on second failure
 
     def stop(self) -> None:
         """Stop and close the audio stream."""
