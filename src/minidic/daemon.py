@@ -58,7 +58,7 @@ def run_daemon(args: argparse.Namespace) -> None:
     signal.signal(signal.SIGTERM, _on_sigterm)
 
     gemini_enabled = get_gemini_enabled(default=args.gemini)
-    write_runtime_config({"gemini": gemini_enabled})
+    write_runtime_config({"duration": args.duration, "gemini": gemini_enabled})
 
     transcriber = Transcriber(model_id=args.model, smooth_with_gemini=gemini_enabled)
     model_loaded = False

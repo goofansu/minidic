@@ -58,8 +58,9 @@ minidic menubar
 ![Menu bar icon (running)](screenshots/menubar-daemon-started.png)
 
 1. Start the menu bar app.
-2. In the menu bar app, click **Start daemon** (or **Stop daemon** to stop it).
-3. Press `F5` to toggle start/stop dictation (captured globally; other apps will not receive `F5` while daemon is running).
+2. Optionally choose a max recording length from **Duration** in the menu.
+3. Click **Start daemon** (or **Stop daemon** to stop it).
+4. Press `F5` to toggle start/stop dictation (captured globally; other apps will not receive `F5` while daemon is running).
 
 ## Technique overview
 
@@ -88,7 +89,7 @@ The daemon mode is hotkey-driven and lazily loads/unloads the model to reduce id
 └── recordings/             # saved WAV recordings captured during dictation/transcription
 
 ~/.local/state/minidic/
-├── config.json            # persisted runtime config such as Gemini toggle state
+├── config.json            # persisted runtime config such as Gemini and duration settings
 ├── daemon.log             # daemon logs
 ├── daemon.pid             # daemon process ID
 ├── daemon.state           # current daemon state: idle, recording, transcribing

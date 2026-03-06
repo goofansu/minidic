@@ -30,7 +30,12 @@ from AppKit import (
 )
 from Foundation import NSMakeRect, NSObject, NSTimer
 
-from minidic.runtime.config import get_gemini_enabled, set_gemini_enabled
+from minidic.runtime.config import (
+    get_gemini_enabled,
+    get_recording_duration,
+    set_gemini_enabled,
+    set_recording_duration,
+)
 from minidic.runtime.process import (
     DAEMON_LOG_FILE,
     DAEMON_PID_FILE,
@@ -76,6 +81,15 @@ def _set_menu_bar_icon(button: object, state: str) -> None:
     button.setTitle_(_emoji_for_state(state))
 
 
+DURATION_PRESETS = (15.0, 30.0, 60.0, 90.0, 120.0)
+
+
+def _format_duration(duration: float) -> str:
+    if duration.is_integer():
+        return f"{int(duration)}s"
+    return f"{duration:g}s"
+
+
 class MiniDicMenuBarApp(NSObject):
     def initWithArgs_(self, args: argparse.Namespace):
         self = self.init()
@@ -83,6 +97,7 @@ class MiniDicMenuBarApp(NSObject):
             return None
 
         self.args = args
+        self.args.duration = get_recording_duration(default=args.duration)
 
         self.status_item = None
         self.menu = None
@@ -90,6 +105,8 @@ class MiniDicMenuBarApp(NSObject):
 
         self.status_label_item = None
         self.toggle_daemon_item = None
+        self.duration_menu_item = None
+        self.duration_items: dict[float, object] = {}
         self.toggle_gemini_item = None
 
         self.last_runtime_state = "stopped"
@@ -118,6 +135,22 @@ class MiniDicMenuBarApp(NSObject):
         )
         self.toggle_daemon_item.setTarget_(self)
         self.menu.addItem_(self.toggle_daemon_item)
+
+        duration_menu = NSMenu.alloc().init()
+        self.duration_menu_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+            "Duration", None, ""
+        )
+        self.menu.addItem_(self.duration_menu_item)
+        self.menu.setSubmenu_forItem_(duration_menu, self.duration_menu_item)
+
+        for duration in DURATION_PRESETS:
+            item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+                _format_duration(duration), "selectDuration:", ""
+            )
+            item.setTarget_(self)
+            item.setTag_(int(duration))
+            duration_menu.addItem_(item)
+            self.duration_items[duration] = item
 
         self.toggle_gemini_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
             "Gemini mode", "toggleGemini:", ""
@@ -177,6 +210,13 @@ class MiniDicMenuBarApp(NSObject):
             self.status_label_item.setTitle_(f"Status: {detail} (pid {pid})")
             self.toggle_daemon_item.setTitle_("Stop daemon")
             runtime_state = read_runtime_state()
+
+        current_duration = get_recording_duration(default=self.args.duration)
+        self.args.duration = current_duration
+        if self.duration_menu_item is not None:
+            self.duration_menu_item.setTitle_(f"Duration: {_format_duration(current_duration)}")
+        for duration, item in self.duration_items.items():
+            item.setState_(1 if duration == current_duration else 0)
 
         gemini_enabled = get_gemini_enabled(default=self.args.gemini)
         if self.toggle_gemini_item is not None:
@@ -329,6 +369,12 @@ class MiniDicMenuBarApp(NSObject):
                 break
             time.sleep(0.1)
 
+        self.refreshStatus_(None)
+
+    def selectDuration_(self, sender: object) -> None:
+        duration = float(sender.tag())
+        set_recording_duration(duration)
+        self.args.duration = duration
         self.refreshStatus_(None)
 
     def toggleGemini_(self, sender: object) -> None:
