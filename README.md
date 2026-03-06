@@ -26,6 +26,8 @@ On first use, macOS will prompt for the permissions required by `minidic`. In ge
 - **Microphone** — needed to capture live audio for dictation
 - **Accessibility** — needed to inject the transcribed text into the active app and handle global hotkeys in menu bar mode
 
+To use `--gemini`, set `GEMINI_API_KEY` in your environment before running `minidic`.
+
 ### Console
 
 Run an interactive dictation session in the terminal. This records from your microphone, transcribes locally, and inserts the final text into the active app.
