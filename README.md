@@ -13,7 +13,7 @@ uv tool install minidic
 To upgrade an existing install:
 
 ```bash
-uv tool install --reinstall minidic
+uv tool upgrade minidic
 ```
 
 The first run will download `mlx-community/parakeet-tdt-0.6b-v3`.
