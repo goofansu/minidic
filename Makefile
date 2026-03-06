@@ -1,6 +1,3 @@
-install:
-	uv tool install --reinstall --from . minidic
-
 release:
 	rm -rf dist
 	uv build
