@@ -176,7 +176,7 @@ class MiniDicMenuBarApp(NSObject):
         self.refreshStatus_(None)
 
         self.timer = NSTimer.scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_(
-            0.2,
+            0.5,
             self,
             "refreshStatus:",
             None,
