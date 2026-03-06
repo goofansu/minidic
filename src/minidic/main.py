@@ -34,7 +34,7 @@ def _add_common_options(parser: argparse.ArgumentParser, *, include_duration: bo
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(
         prog="minidic",
-        description="Voice dictation for macOS",
+        description="Tiny macOS dictation tool on your menubar",
     )
 
     sub = p.add_subparsers(dest="command", metavar="{console,menubar,transcribe}")

@@ -1,7 +1,7 @@
 [project]
 name = "minidic"
 version = "1.0.0"
-description = "Voice dictation for macOS"
+description = "Tiny macOS dictation tool on your menubar"
 readme = "README.md"
 license = "MIT"
 authors = [
