@@ -1,6 +1,6 @@
 # minidic
 
-A tiny **vibe coding** project for voice dictation on macOS — built as a personal, fast-iteration tool for local use on one machine (not a polished/distributed app).
+A tiny macOS dictation tool for fast voice input from the menu bar or terminal.
 
 ## Install
 
