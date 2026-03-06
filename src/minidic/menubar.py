@@ -30,21 +30,21 @@ from AppKit import (
 )
 from Foundation import NSMakeRect, NSObject, NSTimer
 
-from minidic.runtime.config import (
-    get_gemini_enabled,
-    get_recording_duration,
-    set_gemini_enabled,
-    set_recording_duration,
-)
 from minidic.runtime.process import (
     DAEMON_LOG_FILE,
     DAEMON_PID_FILE,
     build_minidic_command,
     ensure_runtime_dirs,
     read_daemon_pid,
-    read_runtime_state,
     spawn_detached,
     stop_pid,
+)
+from minidic.runtime.state import read_runtime_state
+from minidic.settings import (
+    get_gemini_enabled,
+    get_recording_duration,
+    set_gemini_enabled,
+    set_recording_duration,
 )
 
 

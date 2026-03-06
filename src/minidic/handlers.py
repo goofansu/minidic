@@ -20,11 +20,11 @@ from minidic.runtime.process import (
     MENUBAR_LOG_FILE,
     MENUBAR_PID_FILE,
     build_minidic_command,
-    clear_runtime_state,
     ensure_runtime_dirs,
     read_menubar_pid,
     spawn_detached,
 )
+from minidic.runtime.state import clear_runtime_state
 from minidic.transcribe import Transcriber
 
 logger = logging.getLogger(__name__)

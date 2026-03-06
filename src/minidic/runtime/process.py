@@ -17,7 +17,6 @@ DAEMON_PID_FILE = _STATE_DIR / "daemon.pid"
 MENUBAR_PID_FILE = _STATE_DIR / "menubar.pid"
 DAEMON_LOG_FILE = _STATE_DIR / "daemon.log"
 MENUBAR_LOG_FILE = _STATE_DIR / "menubar.log"
-DAEMON_STATE_FILE = _STATE_DIR / "daemon.state"
 
 
 def ensure_runtime_dirs() -> None:
@@ -108,18 +107,3 @@ def stop_pid(pid: int, *, timeout_seconds: float = 5.0) -> bool:
 
     return False
 
-
-def read_runtime_state() -> str:
-    try:
-        state = DAEMON_STATE_FILE.read_text().strip().lower()
-    except OSError:
-        return "idle"
-    return state if state in {"idle", "recording", "transcribing"} else "idle"
-
-
-def write_runtime_state(state: str) -> None:
-    DAEMON_STATE_FILE.write_text(state)
-
-
-def clear_runtime_state() -> None:
-    DAEMON_STATE_FILE.unlink(missing_ok=True)

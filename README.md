@@ -88,10 +88,10 @@ The daemon mode is hotkey-driven and lazily loads/unloads the model to reduce id
 
 ```text
 ~/.minidic/
-└── recordings/             # saved WAV recordings captured during dictation/transcription
+├── settings.json          # persisted runtime config such as Gemini and duration settings
+└── recordings/            # saved WAV recordings captured during dictation/transcription
 
 ~/.local/state/minidic/
-├── config.json            # persisted runtime config such as Gemini and duration settings
 ├── daemon.log             # daemon logs
 ├── daemon.pid             # daemon process ID
 ├── daemon.state           # current daemon state: idle, recording, transcribing
