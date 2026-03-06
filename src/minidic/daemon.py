@@ -18,7 +18,7 @@ from minidic.audio import AudioStream, TARGET_RATE, int16_to_float32
 from minidic.inject import inject_text
 from minidic.runtime.process import DAEMON_PID_FILE
 from minidic.runtime.state import clear_runtime_state, write_runtime_state
-from minidic.settings import get_gemini_enabled, write_settings
+from minidic.settings import get_gemini_enabled
 from minidic.transcribe import Transcriber
 
 logger = logging.getLogger(__name__)
@@ -59,7 +59,6 @@ def run_daemon(args: argparse.Namespace) -> None:
     signal.signal(signal.SIGTERM, _on_sigterm)
 
     gemini_enabled = get_gemini_enabled(default=args.gemini)
-    write_settings({"duration": args.duration, "gemini": gemini_enabled})
 
     transcriber = Transcriber(model_id=args.model, smooth_with_gemini=gemini_enabled)
     model_loaded = False
