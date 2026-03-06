@@ -21,6 +21,11 @@ Make sure `~/.local/bin` is on your `PATH`.
 
 ## Usage
 
+On first use, macOS will prompt for the permissions required by `minidic`. In general, you need to grant these permissions to the terminal app you use to run the commands:
+
+- **Microphone** — needed to capture live audio for dictation
+- **Accessibility** — needed to inject the transcribed text into the active app and handle global hotkeys in menu bar mode
+
 ### Console
 
 Run an interactive dictation session in the terminal. This records from your microphone, transcribes locally, and inserts the final text into the active app.
@@ -76,17 +81,15 @@ The daemon mode is hotkey-driven and lazily loads/unloads the model to reduce id
 
 ### Directory structure
 
-- `~/.minidic/` — user data directory
-- `~/.minidic/recordings/` — saved WAV recordings captured during dictation/transcription
-- `~/.local/state/minidic/` — runtime state directory
-- `~/.local/state/minidic/daemon.log` — daemon logs
-- `~/.local/state/minidic/menubar.log` — menu bar app logs
-- `~/.local/state/minidic/daemon.pid` — daemon process ID
-- `~/.local/state/minidic/menubar.pid` — menu bar process ID
-- `~/.local/state/minidic/daemon.state` — current daemon state (`idle`, `recording`, `transcribing`)
-- `~/.local/state/minidic/config.json` — persisted runtime config such as Gemini toggle state
+```text
+~/.minidic/
+└── recordings/             # saved WAV recordings captured during dictation/transcription
 
-Runtime notes:
-- macOS permissions (microphone/accessibility) are required.
-- Recordings are stored under `~/.minidic/`.
-- Logs, PID, and runtime state files are stored under `~/.local/state/minidic/`.
+~/.local/state/minidic/
+├── config.json            # persisted runtime config such as Gemini toggle state
+├── daemon.log             # daemon logs
+├── daemon.pid             # daemon process ID
+├── daemon.state           # current daemon state: idle, recording, transcribing
+├── menubar.log            # menu bar app logs
+└── menubar.pid            # menu bar process ID
+```
