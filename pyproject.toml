@@ -1,12 +1,22 @@
 [project]
 name = "minidic"
-version = "0.1.0"
+version = "1.0.0"
 description = "Voice dictation for macOS"
 readme = "README.md"
+license = "MIT"
 authors = [
     { name = "Yejun Su", email = "goofan.su@gmail.com" }
 ]
 requires-python = ">=3.12"
+keywords = ["dictation", "speech-to-text", "transcription", "macOS", "menubar"]
+classifiers = [
+    "Environment :: Console",
+    "Environment :: MacOS X",
+    "Operating System :: MacOS :: MacOS X",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+]
 dependencies = [
     "google-genai>=1.0.0",
     "parakeet-mlx>=0.5.1",
@@ -14,6 +24,11 @@ dependencies = [
     "sounddevice>=0.5.5",
     "soxr>=1.0.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/goofansu/minidic"
+Repository = "https://github.com/goofansu/minidic"
+Issues = "https://github.com/goofansu/minidic/issues"
 
 [project.scripts]
 minidic = "minidic.main:main"

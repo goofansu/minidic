@@ -4,14 +4,16 @@ A tiny **vibe coding** project for voice dictation on macOS — built as a perso
 
 ## Install
 
+`minidic` is published on PyPI for macOS users.
+
 ```bash
-uv tool install --from "git+https://github.com/goofansu/minidic.git" minidic
+uv tool install minidic
 ```
 
 To upgrade an existing install:
 
 ```bash
-uv tool install --reinstall --from "git+https://github.com/goofansu/minidic.git" minidic
+uv tool install --reinstall minidic
 ```
 
 The first run will download `mlx-community/parakeet-tdt-0.6b-v3`.
