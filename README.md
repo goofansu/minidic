@@ -56,8 +56,8 @@ Run `minidic` as a menu bar app with a background daemon and global `F5` hotkey 
 minidic menubar
 ```
 
-![Menu bar icon (stopped)](screenshots/menubar-daemon-stopped.png)
-![Menu bar icon (running)](screenshots/menubar-daemon-started.png)
+![Menu bar icon (stopped)](https://raw.githubusercontent.com/goofansu/minidic/main/screenshots/menubar-daemon-stopped.png)
+![Menu bar icon (running)](https://raw.githubusercontent.com/goofansu/minidic/main/screenshots/menubar-daemon-started.png)
 
 1. Start the menu bar app.
 2. Optionally choose a max recording length from **Duration** in the menu.
