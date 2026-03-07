@@ -16,8 +16,6 @@ To upgrade an existing install:
 uv tool upgrade minidic
 ```
 
-The first time you use the default offline backend, `minidic` will download `mlx-community/parakeet-tdt-0.6b-v3`.
-
 `uv tool` installs `minidic` to `~/.local/bin/minidic`.
 Make sure `~/.local/bin` is on your `PATH`.
 
@@ -42,6 +40,8 @@ minidic console
 minidic console --provider groq
 minidic console --enhancement gemini
 ```
+
+The first time you use the default offline backend, `minidic console` will download `mlx-community/parakeet-tdt-0.6b-v3`.
 
 Use Parakeet for fully local transcription or Groq for cloud-based transcription. Gemini is optional and can improve punctuation and phrasing after transcription. You can combine `--provider groq` with `--enhancement gemini`.
 
