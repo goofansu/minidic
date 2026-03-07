@@ -22,7 +22,7 @@ def _git_short_hash() -> str | None:
 
 
 def version_string() -> str:
-    """Return ``1.0.4 (abc1234)`` in dev, ``1.0.4`` in release."""
+    """Return ``1.0.5 (abc1234)`` in dev, ``1.0.5`` in release."""
     ver = _pkg_version("minidic")
     commit = _git_short_hash()
     if commit:
