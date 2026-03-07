@@ -26,7 +26,6 @@ def _git_short_hash() -> str | None:
 
 
 def version_string() -> str:
-    """Return ``1.0.5 (abc1234)`` in a git checkout, ``1.0.5`` otherwise."""
     ver = _pkg_version("minidic")
     commit = _git_short_hash()
     if commit:
