@@ -320,9 +320,9 @@ class MiniDicMenuBarApp(NSObject):
             self.hideTranscribingOverlay_(None)
 
         if runtime_state == "recording" and self.last_runtime_state != "recording":
-            self.showDictationOverlay_("🎙️ Dictation started")
+            self.showDictationOverlay_("Listening")
         elif self.last_runtime_state == "recording" and runtime_state == "idle":
-            self.showDictationOverlay_("Dictation stopped")
+            self.hideOverlay_(None)
 
         self.last_runtime_state = runtime_state
 
@@ -331,7 +331,7 @@ class MiniDicMenuBarApp(NSObject):
             return
 
         self.transcribing_overlay_visible = True
-        self.showDictationOverlay_("⏳ Transcribing")
+        self.showDictationOverlay_("Transcribing")
 
         # Keep overlay visible for the entire transcription phase.
         if self.overlay_timer is not None:
@@ -347,17 +347,24 @@ class MiniDicMenuBarApp(NSObject):
             self.overlay_timer.invalidate()
             self.overlay_timer = None
 
-        width = 200
-        height = 44
+        persistent = message in {"Listening", "Transcribing"}
+
+        width = 260
+        height = 88
+
+        if message == "Transcribing":
+            icon_text = "⏳"
+        else:
+            icon_text = "🎙️"
 
         target_screen = NSScreen.mainScreen()
         if target_screen is None:
             return
 
-        frame = target_screen.frame()
-        top_margin = 48
+        frame = target_screen.visibleFrame()
+        top_offset = 140
         x = frame.origin.x + (frame.size.width - width) / 2
-        y = frame.origin.y + frame.size.height - height - top_margin
+        y = frame.origin.y + frame.size.height - height - top_offset
 
         if self.overlay_window is None:
             self.overlay_window = NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
@@ -378,21 +385,33 @@ class MiniDicMenuBarApp(NSObject):
 
             content = self.overlay_window.contentView()
             content.setWantsLayer_(True)
-            content.layer().setCornerRadius_(10.0)
+            content.layer().setCornerRadius_(20.0)
             content.layer().setMasksToBounds_(True)
             content.layer().setBackgroundColor_(
-                NSColor.colorWithCalibratedWhite_alpha_(0.08, 0.88).CGColor()
+                NSColor.colorWithCalibratedWhite_alpha_(0.08, 0.92).CGColor()
+            )
+            content.layer().setBorderWidth_(1.0)
+            content.layer().setBorderColor_(
+                NSColor.colorWithCalibratedWhite_alpha_(1.0, 0.12).CGColor()
             )
 
-            font = NSFont.systemFontOfSize_weight_(13.0, 0.3)
-            label_h = 20
-            label_y = (height - label_h) / 2
-            label = NSTextField.alloc().initWithFrame_(
-                NSMakeRect(12, label_y, width - 24, label_h)
-            )
+            badge = NSTextField.alloc().initWithFrame_(NSMakeRect(0, 48, width, 24))
+            badge.setTag_(1)
+            badge.setAlignment_(NSTextAlignmentCenter)
+            badge.setTextColor_(NSColor.whiteColor())
+            badge.setFont_(NSFont.systemFontOfSize_weight_(22.0, 0.5))
+            badge.setDrawsBackground_(False)
+            badge.setBezeled_(False)
+            badge.setEditable_(False)
+            badge.setSelectable_(False)
+            badge.setStringValue_(icon_text)
+            content.addSubview_(badge)
+
+            label = NSTextField.alloc().initWithFrame_(NSMakeRect(18, 20, width - 36, 22))
+            label.setTag_(3)
             label.setAlignment_(NSTextAlignmentCenter)
             label.setTextColor_(NSColor.whiteColor())
-            label.setFont_(font)
+            label.setFont_(NSFont.systemFontOfSize_weight_(15.0, 0.45))
             label.setDrawsBackground_(False)
             label.setBezeled_(False)
             label.setEditable_(False)
@@ -401,11 +420,14 @@ class MiniDicMenuBarApp(NSObject):
             content.addSubview_(label)
         else:
             self.overlay_window.setFrame_display_(((x, y), (width, height)), True)
-            label_h = 20
-            label_y = (height - label_h) / 2
             for view in self.overlay_window.contentView().subviews():
-                if isinstance(view, NSTextField):
-                    view.setFrame_(NSMakeRect(12, label_y, width - 24, label_h))
+                if not isinstance(view, NSTextField):
+                    continue
+                if view.tag() == 1:
+                    view.setFrame_(NSMakeRect(0, 48, width, 24))
+                    view.setStringValue_(icon_text)
+                elif view.tag() == 3:
+                    view.setFrame_(NSMakeRect(18, 20, width - 36, 22))
                     view.setStringValue_(message)
 
         self.overlay_window.setAlphaValue_(0.0)
@@ -417,13 +439,14 @@ class MiniDicMenuBarApp(NSObject):
 
         NSAnimationContext.runAnimationGroup_completionHandler_(_fade_in, None)
 
-        self.overlay_timer = NSTimer.scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_(
-            1.2,
-            self,
-            "hideOverlay:",
-            None,
-            False,
-        )
+        if not persistent:
+            self.overlay_timer = NSTimer.scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_(
+                1.2,
+                self,
+                "hideOverlay:",
+                None,
+                False,
+            )
 
     def hideOverlay_(self, timer: object) -> None:
         if self.overlay_window is None:
