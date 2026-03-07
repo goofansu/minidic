@@ -8,6 +8,7 @@ from pathlib import Path
 
 
 _PACKAGE_ROOT = Path(__file__).resolve().parent
+__version__ = "1.1.0"
 
 
 def _git_short_hash() -> str | None:
@@ -26,7 +27,10 @@ def _git_short_hash() -> str | None:
 
 
 def version_string() -> str:
-    ver = _pkg_version("minidic")
+    try:
+        ver = _pkg_version("minidic")
+    except Exception:
+        ver = __version__
     commit = _git_short_hash()
     if commit:
         return f"{ver} ({commit})"
