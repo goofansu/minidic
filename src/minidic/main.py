@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 
+from minidic._version import version_string
 from minidic.handlers import (
     cmd_daemon_foreground,
     cmd_menubar,
@@ -36,6 +37,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         prog="minidic",
         description="Tiny macOS dictation tool on your menubar",
     )
+    p.add_argument("--version", action="version", version=version_string())
 
     sub = p.add_subparsers(dest="command", metavar="{console,menubar,transcribe}")
 

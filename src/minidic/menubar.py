@@ -40,6 +40,7 @@ from minidic.runtime.process import (
     stop_pid,
 )
 from minidic.runtime.state import read_runtime_state
+from minidic._version import version_string
 from minidic.settings import (
     get_gemini_enabled,
     get_recording_duration,
@@ -123,7 +124,7 @@ class MiniDicMenuBarApp(NSObject):
         self.menu = NSMenu.alloc().init()
 
         self.status_label_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
-            "minidic", None, ""
+            f"minidic {version_string()}", None, ""
         )
         self.status_label_item.setEnabled_(False)
         self.menu.addItem_(self.status_label_item)
