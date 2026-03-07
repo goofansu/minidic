@@ -16,41 +16,48 @@ To upgrade an existing install:
 uv tool upgrade minidic
 ```
 
-The first run will download `mlx-community/parakeet-tdt-0.6b-v3`.
+The first time you use the default offline backend, `minidic` will download `mlx-community/parakeet-tdt-0.6b-v3`.
 
 `uv tool` installs `minidic` to `~/.local/bin/minidic`.
 Make sure `~/.local/bin` is on your `PATH`.
 
 ## Usage
 
-On first use, macOS will prompt for the permissions required by `minidic`. In general, you need to grant these permissions to the terminal app you use to run the commands:
+On first use, macOS will prompt for the permissions required by `minidic`. In general, you need to grant these permissions to the terminal app you use to run `minidic`:
 
 - **Microphone** — needed to capture live audio for dictation
-- **Accessibility** — needed to inject the transcribed text into the active app and handle global hotkeys in menu bar mode
+- **Accessibility** — needed to inject transcribed text into the active app and handle global hotkeys in menu bar mode
 
-To use `--gemini`, set `GEMINI_API_KEY` in your environment before running `minidic`.
+Environment variables:
+
+- `GROQ_API_KEY` — required when using `--provider groq`
+- `GEMINI_API_KEY` — required when using `--enhancement gemini`
 
 ### Console
 
-Run an interactive dictation session in the terminal. This records from your microphone, transcribes locally, and inserts the final text into the active app.
+Run an interactive dictation session in the terminal. It records from your microphone, transcribes speech, and prints the result.
 
 ```bash
 minidic console
-minidic console --gemini
+minidic console --provider groq
+minidic console --enhancement gemini
 ```
+
+Use Parakeet for fully local transcription or Groq for cloud-based transcription. Gemini is optional and can improve punctuation and phrasing after transcription. You can combine `--provider groq` with `--enhancement gemini`.
 
 ### Transcribe
 
-Transcribe an existing audio file from disk instead of recording live microphone input.
+Transcribe an existing WAV file from disk instead of recording live microphone input.
 
 ```bash
 minidic transcribe path/to/file.wav
-minidic transcribe --gemini path/to/file.wav
+minidic transcribe --provider groq path/to/file.wav
+minidic transcribe --enhancement gemini path/to/file.wav
 ```
 
-### Menubar
+### Menu bar
 
-Run `minidic` as a menu bar app with a background daemon and global `F5` hotkey for push-to-toggle dictation.
+Run `minidic` in menu bar mode with a background daemon and a global `F5` hotkey to toggle dictation.
 
 ```bash
 minidic menubar
@@ -59,42 +66,82 @@ minidic menubar
 ![Menu bar icon (stopped)](https://raw.githubusercontent.com/goofansu/minidic/main/screenshots/menubar-daemon-stopped.png)
 ![Menu bar icon (running)](https://raw.githubusercontent.com/goofansu/minidic/main/screenshots/menubar-daemon-started.png)
 
-1. Start the menu bar app.
-2. Optionally choose a max recording length from **Duration** in the menu.
-3. Click **Start daemon** (or **Stop daemon** to stop it).
-4. Press `F5` to toggle start/stop dictation (captured globally; other apps will not receive `F5` while daemon is running).
+The `menubar` command itself does not accept ASR or enhancement selection flags. Use the menu bar UI to change ASR, enhancement, and duration.
 
-## Technique overview
+The menu bar UI lets you change settings without restarting the daemon; changes apply on the next transcription:
 
-`minidic` captures microphone audio, normalizes it to 16 kHz, and runs local speech-to-text with streaming-style decoding.
+1. Start menu bar mode.
+2. Optionally choose **ASR**: `Offline (Parakeet)` or `Online (Groq)`.
+3. Optionally choose **Enhancement**: `None` or `Gemini`.
+4. Optionally choose a max recording length from **Duration**.
+5. Click **Start daemon**.
+6. Press `F5` to toggle start/stop dictation.
+
+Groq and Gemini require their respective API keys. If a key is missing, `minidic` raises an error; in daemon mode, the error is logged to `daemon.log`.
+
+## How it works
+
+`minidic` captures microphone audio, normalizes it to 16 kHz, and runs speech-to-text plus optional cleanup.
 
 ### Models used
 
-- **ASR model:** `parakeet-mlx` for on-device audio transcription on Apple Silicon / MLX
-- **LLM model:** `gemini-3.1-flash-lite-preview` for optional transcript cleanup (thinking disabled)
+- **Offline ASR:** `parakeet-mlx` on Apple Silicon via MLX
+- **Online ASR:** Groq Whisper (`whisper-large-v3-turbo`)
+- **Enhancement model:** `gemini-3.1-flash-lite-preview`
 
 ### High-level pipeline
 
 1. Capture mic audio with `sounddevice`
-2. Resample to 16 kHz with `soxr` (when needed)
-3. Transcribe with `parakeet-mlx` on-device
-4. Smooth transcription by default with local regex cleanup (remove filler words like `um`, `uh`, etc.)
-5. Further smooth with Gemini when `GEMINI_API_KEY` is set and Gemini mode is enabled (via `--gemini` for `console`/`transcribe`, or via the menu bar toggle)
-6. Inject text into the active app on macOS
+2. Resample to 16 kHz with `soxr` when needed
+3. Transcribe with Parakeet or Groq depending on `asr.provider`
+4. Apply local regex cleanup by default to remove filler words like `um` and `uh`
+5. Optionally run Gemini enhancement when enabled
+6. Inject text into the active app on macOS in daemon mode
 
-The daemon mode is hotkey-driven and lazily loads/unloads the model to reduce idle resource usage.
+The daemon mode is hotkey-driven and lazily loads and unloads the ASR model to reduce idle resource usage.
 
 ### Directory structure
 
 ```text
 ~/.minidic/
-├── settings.json          # persisted runtime config such as Gemini and duration settings
-└── recordings/            # saved WAV recordings captured during dictation/transcription
+├── settings.json          # persisted settings for `asr`, `enhancement`, and `recording`
+└── recordings/            # WAV recordings created during dictation/transcription
 
 ~/.local/state/minidic/
 ├── daemon.log             # daemon logs
 ├── daemon.pid             # daemon process ID
 ├── daemon.state           # current daemon state: idle, recording, transcribing
-├── menubar.log            # menu bar app logs
+├── menubar.log            # menu bar mode logs
 └── menubar.pid            # menu bar process ID
+```
+
+### Configuration
+
+`minidic` stores persistent configuration in `~/.minidic/settings.json`.
+
+`minidic` uses three config groups:
+
+- `asr`
+  - `provider`: `parakeet` or `groq`
+  - `model`: provider-specific internal default; not exposed in the CLI or menu bar UI
+- `enhancement`
+  - `provider`: `none` or `gemini`
+- `recording`
+  - `duration_seconds`
+
+Default `settings.json`:
+
+```json
+{
+  "asr": {
+    "model": "mlx-community/parakeet-tdt-0.6b-v3",
+    "provider": "parakeet"
+  },
+  "enhancement": {
+    "provider": "none"
+  },
+  "recording": {
+    "duration_seconds": 60.0
+  }
+}
 ```

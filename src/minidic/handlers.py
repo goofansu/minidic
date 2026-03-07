@@ -19,10 +19,12 @@ from minidic.runtime.process import (
     DAEMON_PID_FILE,
     MENUBAR_LOG_FILE,
     MENUBAR_PID_FILE,
+    acquire_menubar_lock,
     build_minidic_command,
     ensure_runtime_dirs,
     read_menubar_pid,
     spawn_detached,
+    write_menubar_lock_metadata,
 )
 from minidic.runtime.state import clear_runtime_state
 from minidic.transcribe import Transcriber
@@ -68,8 +70,12 @@ def setup_logging(verbose: bool, *, to_file: bool = False) -> None:
 def run_interactive(args: argparse.Namespace) -> None:
     setup_logging(args.verbose)
 
-    transcriber = Transcriber(model_id=args.model, smooth_with_gemini=args.gemini)
-    print(f"Loading ASR model ({args.model}) …", flush=True)
+    transcriber = Transcriber(
+        asr_provider=args.provider,
+        enhancement_provider=args.enhancement,
+    )
+    backend_name = "Groq ASR" if args.provider == "groq" else "ASR model"
+    print(f"Loading {backend_name} ({transcriber.model_id}) …", flush=True)
     transcriber.load()
     print("ASR model ready.", flush=True)
 
@@ -179,17 +185,22 @@ def cmd_menubar(args: argparse.Namespace) -> None:
 def cmd_menubar_foreground(args: argparse.Namespace) -> None:
     from minidic.menubar import run_menubar
 
-    existing = read_menubar_pid()
-    if existing is not None and existing != os.getpid():
-        print(f"Menu bar app already running (pid {existing}).", flush=True)
+    lock_file = acquire_menubar_lock()
+    if lock_file is None:
+        existing = read_menubar_pid()
+        if existing is not None and existing != os.getpid():
+            print(f"Menu bar app already running (pid {existing}).", flush=True)
+        else:
+            print("Menu bar app already running.", flush=True)
         sys.exit(1)
 
-    ensure_runtime_dirs()
     MENUBAR_PID_FILE.write_text(str(os.getpid()))
+    write_menubar_lock_metadata(lock_file, os.getpid())
     try:
         run_menubar(args)
     finally:
         MENUBAR_PID_FILE.unlink(missing_ok=True)
+        lock_file.close()
 
 
 def cmd_transcribe(args: argparse.Namespace) -> None:
@@ -242,7 +253,10 @@ def cmd_transcribe(args: argparse.Namespace) -> None:
     duration = len(audio_f32) / TARGET_RATE
     print(f"Transcribing {duration:.1f}s of audio …", file=sys.stderr, flush=True)
 
-    transcriber = Transcriber(model_id=args.model, smooth_with_gemini=args.gemini)
+    transcriber = Transcriber(
+        asr_provider=args.provider,
+        enhancement_provider=args.enhancement,
+    )
     transcriber.load()
 
     text = transcriber.transcribe(audio_f32)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 import time
 
@@ -30,6 +31,7 @@ from AppKit import (
 )
 from Foundation import NSMakeRect, NSObject, NSTimer
 
+from minidic._version import version_string
 from minidic.runtime.process import (
     DAEMON_LOG_FILE,
     DAEMON_PID_FILE,
@@ -40,13 +42,18 @@ from minidic.runtime.process import (
     stop_pid,
 )
 from minidic.runtime.state import read_runtime_state
-from minidic._version import version_string
 from minidic.settings import (
-    get_gemini_enabled,
+    get_asr_settings,
+    get_enhancement_settings,
     get_recording_duration,
-    set_gemini_enabled,
+    set_asr_settings,
+    set_enhancement_settings,
     set_recording_duration,
 )
+
+ASR_PROVIDER_TAGS = {0: "parakeet", 1: "groq"}
+ENHANCEMENT_PROVIDER_TAGS = {0: "none", 1: "gemini"}
+DURATION_PRESETS = (15.0, 30.0, 60.0, 90.0, 120.0)
 
 
 def _infer_daemon_state() -> tuple[str, int | None, str]:
@@ -82,13 +89,34 @@ def _set_menu_bar_icon(button: object, state: str) -> None:
     button.setTitle_(_emoji_for_state(state))
 
 
-DURATION_PRESETS = (15.0, 30.0, 60.0, 90.0, 120.0)
-
-
 def _format_duration(duration: float) -> str:
     if duration.is_integer():
         return f"{int(duration)}s"
     return f"{duration:g}s"
+
+
+def _groq_available() -> bool:
+    return bool(os.environ.get("GROQ_API_KEY", "").strip())
+
+
+def _gemini_available() -> bool:
+    return bool(os.environ.get("GEMINI_API_KEY", "").strip())
+
+
+def _asr_label(provider: str, *, available: bool | None = None) -> str:
+    if provider == "groq":
+        if available is False:
+            return "Online (Groq) — requires GROQ_API_KEY"
+        return "Online (Groq)"
+    return "Offline (Parakeet)"
+
+
+def _enhancement_label(provider: str, *, available: bool | None = None) -> str:
+    if provider == "gemini":
+        if available is False:
+            return "Gemini — requires GEMINI_API_KEY"
+        return "Gemini"
+    return "None"
 
 
 class MiniDicMenuBarApp(NSObject):
@@ -104,11 +132,13 @@ class MiniDicMenuBarApp(NSObject):
         self.menu = None
         self.timer = None
 
-        self.status_label_item = None
         self.toggle_daemon_item = None
+        self.asr_menu_item = None
+        self.asr_items: dict[str, object] = {}
+        self.enhancement_menu_item = None
+        self.enhancement_items: dict[str, object] = {}
         self.duration_menu_item = None
         self.duration_items: dict[float, object] = {}
-        self.toggle_gemini_item = None
 
         self.last_runtime_state = "stopped"
         self.overlay_window = None
@@ -123,11 +153,11 @@ class MiniDicMenuBarApp(NSObject):
         )
         self.menu = NSMenu.alloc().init()
 
-        self.status_label_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+        title_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
             f"minidic {version_string()}", None, ""
         )
-        self.status_label_item.setEnabled_(False)
-        self.menu.addItem_(self.status_label_item)
+        title_item.setEnabled_(False)
+        self.menu.addItem_(title_item)
 
         self.menu.addItem_(NSMenuItem.separatorItem())
 
@@ -136,6 +166,52 @@ class MiniDicMenuBarApp(NSObject):
         )
         self.toggle_daemon_item.setTarget_(self)
         self.menu.addItem_(self.toggle_daemon_item)
+
+        asr_menu = NSMenu.alloc().init()
+        self.asr_menu_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("ASR", None, "")
+        self.menu.addItem_(self.asr_menu_item)
+        self.menu.setSubmenu_forItem_(asr_menu, self.asr_menu_item)
+
+        asr_parakeet_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+            _asr_label("parakeet"), "selectAsrProvider:", ""
+        )
+        asr_parakeet_item.setTarget_(self)
+        asr_parakeet_item.setTag_(0)
+        asr_menu.addItem_(asr_parakeet_item)
+        self.asr_items["parakeet"] = asr_parakeet_item
+
+        asr_groq_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+            _asr_label("groq", available=_groq_available()), "selectAsrProvider:", ""
+        )
+        asr_groq_item.setTarget_(self)
+        asr_groq_item.setTag_(1)
+        asr_menu.addItem_(asr_groq_item)
+        self.asr_items["groq"] = asr_groq_item
+
+        enhancement_menu = NSMenu.alloc().init()
+        self.enhancement_menu_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+            "Enhancement", None, ""
+        )
+        self.menu.addItem_(self.enhancement_menu_item)
+        self.menu.setSubmenu_forItem_(enhancement_menu, self.enhancement_menu_item)
+
+        enhancement_none_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+            _enhancement_label("none"), "selectEnhancementProvider:", ""
+        )
+        enhancement_none_item.setTarget_(self)
+        enhancement_none_item.setTag_(0)
+        enhancement_menu.addItem_(enhancement_none_item)
+        self.enhancement_items["none"] = enhancement_none_item
+
+        enhancement_gemini_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+            _enhancement_label("gemini", available=_gemini_available()),
+            "selectEnhancementProvider:",
+            "",
+        )
+        enhancement_gemini_item.setTarget_(self)
+        enhancement_gemini_item.setTag_(1)
+        enhancement_menu.addItem_(enhancement_gemini_item)
+        self.enhancement_items["gemini"] = enhancement_gemini_item
 
         duration_menu = NSMenu.alloc().init()
         self.duration_menu_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
@@ -152,12 +228,6 @@ class MiniDicMenuBarApp(NSObject):
             item.setTag_(int(duration))
             duration_menu.addItem_(item)
             self.duration_items[duration] = item
-
-        self.toggle_gemini_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
-            "Gemini mode", "toggleGemini:", ""
-        )
-        self.toggle_gemini_item.setTarget_(self)
-        self.menu.addItem_(self.toggle_gemini_item)
 
         open_log_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
             "Open log", "openLog:", ""
@@ -204,24 +274,45 @@ class MiniDicMenuBarApp(NSObject):
             button.setToolTip_(f"minidic: {detail}")
 
         if pid is None:
-            self.status_label_item.setTitle_("Status: stopped")
             self.toggle_daemon_item.setTitle_("Start daemon")
             runtime_state = "stopped"
         else:
-            self.status_label_item.setTitle_(f"Status: {detail} (pid {pid})")
             self.toggle_daemon_item.setTitle_("Stop daemon")
             runtime_state = read_runtime_state()
 
+        asr_settings = get_asr_settings()
+        enhancement_settings = get_enhancement_settings()
         current_duration = get_recording_duration(default=self.args.duration)
+
+        self.args.provider = asr_settings["provider"]
+        self.args.enhancement = enhancement_settings["provider"]
         self.args.duration = current_duration
+
+        groq_available = _groq_available()
+        gemini_available = _gemini_available()
+
+        if self.asr_menu_item is not None:
+            self.asr_menu_item.setTitle_(f"ASR: {_asr_label(asr_settings['provider'])}")
+        for provider, item in self.asr_items.items():
+            item.setState_(1 if provider == asr_settings["provider"] else 0)
+            if provider == "groq":
+                item.setTitle_(_asr_label("groq", available=groq_available))
+                item.setEnabled_(groq_available)
+
+        if self.enhancement_menu_item is not None:
+            self.enhancement_menu_item.setTitle_(
+                f"Enhancement: {_enhancement_label(enhancement_settings['provider'])}"
+            )
+        for provider, item in self.enhancement_items.items():
+            item.setState_(1 if provider == enhancement_settings["provider"] else 0)
+            if provider == "gemini":
+                item.setTitle_(_enhancement_label("gemini", available=gemini_available))
+                item.setEnabled_(gemini_available)
+
         if self.duration_menu_item is not None:
             self.duration_menu_item.setTitle_(f"Duration: {_format_duration(current_duration)}")
         for duration, item in self.duration_items.items():
             item.setState_(1 if duration == current_duration else 0)
-
-        gemini_enabled = get_gemini_enabled(default=self.args.gemini)
-        if self.toggle_gemini_item is not None:
-            self.toggle_gemini_item.setState_(1 if gemini_enabled else 0)
 
         if runtime_state == "transcribing":
             self.showTranscribingOverlay_(None)
@@ -230,10 +321,7 @@ class MiniDicMenuBarApp(NSObject):
 
         if runtime_state == "recording" and self.last_runtime_state != "recording":
             self.showDictationOverlay_("🎙️ Dictation started")
-        elif (
-            self.last_runtime_state == "recording"
-            and runtime_state == "idle"
-        ):
+        elif self.last_runtime_state == "recording" and runtime_state == "idle":
             self.showDictationOverlay_("Dictation stopped")
 
         self.last_runtime_state = runtime_state
@@ -372,15 +460,28 @@ class MiniDicMenuBarApp(NSObject):
 
         self.refreshStatus_(None)
 
+    def selectAsrProvider_(self, sender: object) -> None:
+        provider = ASR_PROVIDER_TAGS.get(int(sender.tag()))
+        if provider is None:
+            return
+        if provider == "groq" and not _groq_available():
+            return
+        set_asr_settings({"provider": provider})
+        self.refreshStatus_(None)
+
+    def selectEnhancementProvider_(self, sender: object) -> None:
+        provider = ENHANCEMENT_PROVIDER_TAGS.get(int(sender.tag()))
+        if provider is None:
+            return
+        if provider == "gemini" and not _gemini_available():
+            return
+        set_enhancement_settings({"provider": provider})
+        self.refreshStatus_(None)
+
     def selectDuration_(self, sender: object) -> None:
         duration = float(sender.tag())
         set_recording_duration(duration)
         self.args.duration = duration
-        self.refreshStatus_(None)
-
-    def toggleGemini_(self, sender: object) -> None:
-        enabled = get_gemini_enabled(default=self.args.gemini)
-        set_gemini_enabled(not enabled)
         self.refreshStatus_(None)
 
     def openLog_(self, sender: object) -> None:

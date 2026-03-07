@@ -3,18 +3,21 @@
 from __future__ import annotations
 
 import argparse
+import fcntl
 import os
 import signal
 import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import TextIO
 
 _MINIDIC_DIR = Path.home() / ".minidic"
 _STATE_DIR = Path.home() / ".local" / "state" / "minidic"
 
 DAEMON_PID_FILE = _STATE_DIR / "daemon.pid"
 MENUBAR_PID_FILE = _STATE_DIR / "menubar.pid"
+MENUBAR_LOCK_FILE = _STATE_DIR / "menubar.lock"
 DAEMON_LOG_FILE = _STATE_DIR / "daemon.log"
 MENUBAR_LOG_FILE = _STATE_DIR / "menubar.log"
 
@@ -65,13 +68,33 @@ def read_menubar_pid() -> int | None:
     return _read_pid_file(MENUBAR_PID_FILE, subcommand="_menubar")
 
 
+def acquire_menubar_lock() -> TextIO | None:
+    ensure_runtime_dirs()
+    lock_file = MENUBAR_LOCK_FILE.open("a+", encoding="utf-8")
+    try:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        lock_file.close()
+        return None
+    return lock_file
+
+
+def write_menubar_lock_metadata(lock_file: TextIO, pid: int) -> None:
+    lock_file.seek(0)
+    lock_file.truncate()
+    lock_file.write(f"{pid}\n")
+    lock_file.flush()
+    os.fsync(lock_file.fileno())
+
+
 def build_minidic_command(args: argparse.Namespace, subcommand: str) -> list[str]:
     cmd = [sys.executable, "-m", "minidic", subcommand]
     if args.verbose:
         cmd.append("--verbose")
-    if args.gemini:
-        cmd.append("--gemini")
-    cmd.extend(["--model", args.model, "--duration", str(args.duration)])
+
+    cmd.extend(["--provider", args.provider])
+    cmd.extend(["--enhancement", args.enhancement])
+    cmd.extend(["--duration", str(args.duration)])
     return cmd
 
 
@@ -106,4 +129,3 @@ def stop_pid(pid: int, *, timeout_seconds: float = 5.0) -> bool:
         time.sleep(0.1)
 
     return False
-

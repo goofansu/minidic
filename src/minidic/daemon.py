@@ -18,7 +18,7 @@ from minidic.audio import AudioStream, TARGET_RATE, int16_to_float32
 from minidic.inject import inject_text
 from minidic.runtime.process import DAEMON_PID_FILE
 from minidic.runtime.state import clear_runtime_state, write_runtime_state
-from minidic.settings import get_gemini_enabled
+from minidic.settings import get_asr_settings, get_enhancement_settings, get_recording_duration
 from minidic.transcribe import Transcriber
 
 logger = logging.getLogger(__name__)
@@ -58,15 +58,21 @@ def run_daemon(args: argparse.Namespace) -> None:
 
     signal.signal(signal.SIGTERM, _on_sigterm)
 
-    gemini_enabled = get_gemini_enabled(default=args.gemini)
+    asr_settings = get_asr_settings()
+    enhancement_settings = get_enhancement_settings()
 
-    transcriber = Transcriber(model_id=args.model, smooth_with_gemini=gemini_enabled)
+    transcriber = Transcriber(
+        asr_provider=asr_settings["provider"],
+        asr_model=asr_settings["model"],
+        enhancement_provider=enhancement_settings["provider"],
+    )
     model_loaded = False
     last_model_use: float | None = None
     model_lock = threading.Lock()
-    logger.info("ASR model will load on first transcription (%s).", args.model)
+    backend_name = "Groq ASR" if transcriber.asr_provider == "groq" else "ASR model"
+    logger.info("%s will load on first transcription (%s).", backend_name, transcriber.model_id)
 
-    max_speech_samples = int(args.duration * TARGET_RATE)
+    max_speech_samples = int(get_recording_duration(default=args.duration) * TARGET_RATE)
 
     audio: AudioStream | None = None
     recording_chunks: list[np.ndarray] = []
@@ -136,6 +142,33 @@ def run_daemon(args: argparse.Namespace) -> None:
             daemon=True,
         ).start()
 
+    def _transcriber_signature(current: Transcriber) -> tuple[str, str]:
+        return (
+            current.asr_provider,
+            current.model_id,
+        )
+
+    def _ensure_transcriber_current() -> None:
+        nonlocal transcriber, model_loaded, last_model_use, backend_name
+
+        asr_now = get_asr_settings()
+        desired = Transcriber(
+            asr_provider=asr_now["provider"],
+            asr_model=asr_now["model"],
+            enhancement_provider="none",
+        )
+        if _transcriber_signature(desired) == _transcriber_signature(transcriber):
+            return
+
+        if model_loaded:
+            transcriber.unload()
+            model_loaded = False
+            last_model_use = None
+
+        transcriber = desired
+        backend_name = "Groq ASR" if transcriber.asr_provider == "groq" else "ASR model"
+        logger.info("Switched to %s (%s).", backend_name, transcriber.model_id)
+
     def _transcribe_and_inject(chunks: list[np.ndarray]) -> None:
         nonlocal mode, model_loaded, last_model_use
         try:
@@ -150,14 +183,15 @@ def run_daemon(args: argparse.Namespace) -> None:
             logger.info("Transcribing %.1fs …", duration)
 
             with model_lock:
+                _ensure_transcriber_current()
                 if not model_loaded:
-                    logger.info("Loading ASR model (%s) …", args.model)
+                    logger.info("Loading %s (%s) …", backend_name, transcriber.model_id)
                     transcriber.load()
                     model_loaded = True
-                    logger.info("ASR model ready.")
+                    logger.info("%s ready.", backend_name)
 
-                gemini_now = get_gemini_enabled(default=args.gemini)
-                transcriber.set_gemini_enabled(gemini_now)
+                enhancement_now = get_enhancement_settings()
+                transcriber.set_enhancement(enhancement_now["provider"])
 
                 text = transcriber.transcribe(audio_f32)
                 last_model_use = time.monotonic()
@@ -190,15 +224,16 @@ def run_daemon(args: argparse.Namespace) -> None:
                 transcriber.unload()
                 model_loaded = False
                 last_model_use = None
-                logger.info("ASR model unloaded after %.0fs idle.", idle_for)
+                logger.info("%s unloaded after %.0fs idle.", backend_name, idle_for)
 
     def on_hotkey() -> None:
-        nonlocal sample_count, mode, audio
+        nonlocal max_speech_samples, sample_count, mode, audio
 
         with lock:
             if mode == "idle":
                 recording_chunks.clear()
                 sample_count = 0
+                max_speech_samples = int(get_recording_duration(default=args.duration) * TARGET_RATE)
                 try:
                     stream = AudioStream()
                     stream.start()

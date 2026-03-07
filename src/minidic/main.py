@@ -12,23 +12,33 @@ from minidic.handlers import (
     cmd_transcribe,
     run_interactive,
 )
-from minidic.transcribe import DEFAULT_MODEL
+from minidic.settings import (
+    DEFAULT_DURATION_SECONDS,
+    DEFAULT_ENHANCEMENT_PROVIDER,
+    DEFAULT_PROVIDER,
+)
 
 
 def _add_common_options(parser: argparse.ArgumentParser, *, include_duration: bool) -> None:
     parser.add_argument("-v", "--verbose", action="store_true", help="Enable debug logging")
-    parser.add_argument("--model", default=DEFAULT_MODEL, help="HuggingFace model id (default: %(default)s)")
     parser.add_argument(
-        "--gemini",
-        action="store_true",
-        help="Enable Gemini transcript smoothing (requires GEMINI_API_KEY)",
+        "--provider",
+        choices=("parakeet", "groq"),
+        default=DEFAULT_PROVIDER,
+        help="ASR backend provider (default: parakeet)",
+    )
+    parser.add_argument(
+        "--enhancement",
+        choices=("none", "gemini"),
+        default=DEFAULT_ENHANCEMENT_PROVIDER,
+        help="Transcript enhancement provider (default: none)",
     )
     if include_duration:
         parser.add_argument(
             "--duration",
             type=float,
-            default=60,
-            help="Max recording duration in seconds (default: 60)",
+            default=DEFAULT_DURATION_SECONDS,
+            help=f"Max recording duration in seconds (default: {DEFAULT_DURATION_SECONDS:g})",
         )
 
 
@@ -46,7 +56,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
     sp_menubar = sub.add_parser("menubar", help="Launch menu bar status app in background")
     sp_menubar.add_argument("-v", "--verbose", action="store_true", help="Enable debug logging")
-    sp_menubar.set_defaults(model=DEFAULT_MODEL, gemini=False, duration=60)
+    sp_menubar.set_defaults(
+        provider=DEFAULT_PROVIDER,
+        enhancement=DEFAULT_ENHANCEMENT_PROVIDER,
+        duration=DEFAULT_DURATION_SECONDS,
+    )
 
     sp_transcribe = sub.add_parser("transcribe", help="Transcribe a WAV file")
     _add_common_options(sp_transcribe, include_duration=False)
