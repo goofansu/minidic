@@ -195,6 +195,7 @@ class _GroqTranscriber(_BaseTranscriber):
             "model": self.model_id,
             "temperature": 0,
             "response_format": "verbose_json",
+            "prompt": "Hello. 简体中文。",
         }
 
         try:
