@@ -70,7 +70,7 @@ def setup_logging(verbose: bool, *, to_file: bool = False) -> None:
 def run_interactive(args: argparse.Namespace) -> None:
     setup_logging(args.verbose)
 
-    backend_name = "Groq ASR" if args.provider == "groq" else "ASR model"
+    backend_name = "Groq ASR" if args.provider == "whisper" else "ASR model"
     transcriber = Transcriber(
         provider=args.provider,
         polish=args.polish,
