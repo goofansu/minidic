@@ -12,27 +12,26 @@ from minidic.handlers import (
     cmd_transcribe,
     run_interactive,
 )
-from minidic.settings import (
-    DEFAULT_DURATION_SECONDS,
-    DEFAULT_ENHANCEMENT_PROVIDER,
-    DEFAULT_PROVIDER,
-)
+from minidic.settings import DEFAULT_ASR, DEFAULT_DURATION_SECONDS, DEFAULT_POLISH
 
 
 def _add_common_options(parser: argparse.ArgumentParser, *, include_duration: bool) -> None:
     parser.add_argument("-v", "--verbose", action="store_true", help="Enable debug logging")
     parser.add_argument(
-        "--provider",
-        choices=("parakeet", "groq"),
-        default=DEFAULT_PROVIDER,
-        help="ASR backend provider (default: parakeet)",
+        "--asr",
+        choices=("offline", "groq"),
+        dest="provider",
+        default=DEFAULT_ASR,
+        help="ASR mode (default: offline)",
     )
+
     parser.add_argument(
-        "--enhancement",
-        choices=("none", "gemini"),
-        default=DEFAULT_ENHANCEMENT_PROVIDER,
-        help="Transcript enhancement provider (default: none)",
+        "--polish",
+        action="store_true",
+        default=DEFAULT_POLISH,
+        help="Enable transcript polish using the built-in Groq backend",
     )
+
     if include_duration:
         parser.add_argument(
             "--duration",
@@ -57,8 +56,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     sp_menubar = sub.add_parser("menubar", help="Launch menu bar status app in background")
     sp_menubar.add_argument("-v", "--verbose", action="store_true", help="Enable debug logging")
     sp_menubar.set_defaults(
-        provider=DEFAULT_PROVIDER,
-        enhancement=DEFAULT_ENHANCEMENT_PROVIDER,
+        provider=DEFAULT_ASR,
+        polish=DEFAULT_POLISH,
         duration=DEFAULT_DURATION_SECONDS,
     )
 
@@ -73,7 +72,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     _add_common_options(sp_daemon_fg, include_duration=True)
 
     sub._choices_actions = [a for a in sub._choices_actions if not a.dest.startswith("_")]
-    return p.parse_args(argv)
+    args = p.parse_args(argv)
+    if hasattr(args, "provider"):
+        args.provider = "parakeet" if args.provider == "offline" else "groq"
+    return args
 
 
 def main() -> None:

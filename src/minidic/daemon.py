@@ -17,14 +17,18 @@ import numpy as np
 from minidic.audio import AudioStream, TARGET_RATE, int16_to_float32
 from minidic.inject import inject_text
 from minidic.runtime.process import DAEMON_PID_FILE
-from minidic.runtime.state import clear_runtime_state, write_runtime_state
-from minidic.settings import get_asr_settings, get_enhancement_settings, get_recording_duration
+from minidic.runtime.state import clear_runtime_error, clear_runtime_state, write_runtime_error, write_runtime_state
+from minidic.settings import get_asr, get_polish, get_recording_duration
 from minidic.transcribe import Transcriber
 
 logger = logging.getLogger(__name__)
 
 _MINIDIC_DIR = Path.home() / ".minidic"
 _MODEL_IDLE_UNLOAD_SECONDS = 30 * 60
+
+
+def _asr_to_provider(asr: str) -> str:
+    return "groq" if asr == "groq" else "parakeet"
 
 
 def _save_wav(chunks: list[np.ndarray]) -> Path:
@@ -58,13 +62,9 @@ def run_daemon(args: argparse.Namespace) -> None:
 
     signal.signal(signal.SIGTERM, _on_sigterm)
 
-    asr_settings = get_asr_settings()
-    enhancement_settings = get_enhancement_settings()
-
     transcriber = Transcriber(
-        asr_provider=asr_settings["provider"],
-        asr_model=asr_settings["model"],
-        enhancement_provider=enhancement_settings["provider"],
+        asr_provider=_asr_to_provider(get_asr()),
+        polish=get_polish(),
     )
     model_loaded = False
     last_model_use: float | None = None
@@ -85,6 +85,13 @@ def run_daemon(args: argparse.Namespace) -> None:
             write_runtime_state(state)
         except OSError:
             logger.exception("Failed to write state file")
+
+    def _write_error_state(message: str) -> None:
+        try:
+            write_runtime_error(message)
+            write_runtime_state("error")
+        except OSError:
+            logger.exception("Failed to write error state")
 
     finish_event = threading.Event()
 
@@ -151,12 +158,7 @@ def run_daemon(args: argparse.Namespace) -> None:
     def _ensure_transcriber_current() -> None:
         nonlocal transcriber, model_loaded, last_model_use, backend_name
 
-        asr_now = get_asr_settings()
-        desired = Transcriber(
-            asr_provider=asr_now["provider"],
-            asr_model=asr_now["model"],
-            enhancement_provider="none",
-        )
+        desired = Transcriber(asr_provider=_asr_to_provider(get_asr()), polish=False)
         if _transcriber_signature(desired) == _transcriber_signature(transcriber):
             return
 
@@ -171,6 +173,7 @@ def run_daemon(args: argparse.Namespace) -> None:
 
     def _transcribe_and_inject(chunks: list[np.ndarray]) -> None:
         nonlocal mode, model_loaded, last_model_use
+        caught_exc: BaseException | None = None
         try:
             if not chunks:
                 return
@@ -190,8 +193,7 @@ def run_daemon(args: argparse.Namespace) -> None:
                     model_loaded = True
                     logger.info("%s ready.", backend_name)
 
-                enhancement_now = get_enhancement_settings()
-                transcriber.set_enhancement(enhancement_now["provider"])
+                transcriber.set_polish(get_polish())
 
                 text = transcriber.transcribe(audio_f32)
                 last_model_use = time.monotonic()
@@ -201,12 +203,20 @@ def run_daemon(args: argparse.Namespace) -> None:
                 logger.info("Injected: %s", text)
             else:
                 logger.info("No speech detected.")
-        except Exception:
+        except Exception as exc:
             logger.exception("Transcription/injection error")
+            caught_exc = exc
         finally:
             with lock:
                 mode = "idle"
-                _write_state("idle")
+                if caught_exc is not None:
+                    _write_error_state(str(caught_exc))
+                else:
+                    _write_state("idle")
+                    try:
+                        clear_runtime_error()
+                    except OSError:
+                        logger.exception("Failed to clear error file")
 
     def _model_reaper() -> None:
         nonlocal model_loaded, last_model_use
@@ -237,8 +247,9 @@ def run_daemon(args: argparse.Namespace) -> None:
                 try:
                     stream = AudioStream()
                     stream.start()
-                except Exception:
+                except Exception as exc:
                     logger.exception("Failed to open microphone")
+                    _write_error_state(str(exc))
                     return
                 audio = stream
                 mode = "recording"

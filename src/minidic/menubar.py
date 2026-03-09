@@ -41,18 +41,17 @@ from minidic.runtime.process import (
     spawn_detached,
     stop_pid,
 )
-from minidic.runtime.state import read_runtime_state
+from minidic.runtime.state import read_runtime_error, read_runtime_state
 from minidic.settings import (
-    get_asr_settings,
-    get_enhancement_settings,
     get_recording_duration,
-    set_asr_settings,
-    set_enhancement_settings,
+    read_settings,
+    set_asr,
+    set_polish,
     set_recording_duration,
 )
 
 ASR_PROVIDER_TAGS = {0: "parakeet", 1: "groq"}
-ENHANCEMENT_PROVIDER_TAGS = {0: "none", 1: "gemini"}
+POLISH_TAGS = {0: False, 1: True}
 DURATION_PRESETS = (15.0, 30.0, 60.0, 90.0, 120.0)
 
 
@@ -99,10 +98,6 @@ def _groq_available() -> bool:
     return bool(os.environ.get("GROQ_API_KEY", "").strip())
 
 
-def _gemini_available() -> bool:
-    return bool(os.environ.get("GEMINI_API_KEY", "").strip())
-
-
 def _asr_label(provider: str, *, available: bool | None = None) -> str:
     if provider == "groq":
         if available is False:
@@ -111,12 +106,12 @@ def _asr_label(provider: str, *, available: bool | None = None) -> str:
     return "Offline (Parakeet)"
 
 
-def _enhancement_label(provider: str, *, available: bool | None = None) -> str:
-    if provider == "gemini":
+def _polish_label(provider: str, *, available: bool | None = None) -> str:
+    if provider == "groq":
         if available is False:
-            return "Gemini — requires GEMINI_API_KEY"
-        return "Gemini"
-    return "None"
+            return "Yes — requires GROQ_API_KEY"
+        return "Yes"
+    return "No"
 
 
 class MiniDicMenuBarApp(NSObject):
@@ -135,8 +130,8 @@ class MiniDicMenuBarApp(NSObject):
         self.toggle_daemon_item = None
         self.asr_menu_item = None
         self.asr_items: dict[str, object] = {}
-        self.enhancement_menu_item = None
-        self.enhancement_items: dict[str, object] = {}
+        self.polish_menu_item = None
+        self.polish_items: dict[str, object] = {}
         self.duration_menu_item = None
         self.duration_items: dict[float, object] = {}
 
@@ -188,30 +183,30 @@ class MiniDicMenuBarApp(NSObject):
         asr_menu.addItem_(asr_groq_item)
         self.asr_items["groq"] = asr_groq_item
 
-        enhancement_menu = NSMenu.alloc().init()
-        self.enhancement_menu_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
-            "Enhancement", None, ""
+        polish_menu = NSMenu.alloc().init()
+        self.polish_menu_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+            "Polish", None, ""
         )
-        self.menu.addItem_(self.enhancement_menu_item)
-        self.menu.setSubmenu_forItem_(enhancement_menu, self.enhancement_menu_item)
+        self.menu.addItem_(self.polish_menu_item)
+        self.menu.setSubmenu_forItem_(polish_menu, self.polish_menu_item)
 
-        enhancement_none_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
-            _enhancement_label("none"), "selectEnhancementProvider:", ""
+        polish_none_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+            _polish_label("none"), "selectPolishProvider:", ""
         )
-        enhancement_none_item.setTarget_(self)
-        enhancement_none_item.setTag_(0)
-        enhancement_menu.addItem_(enhancement_none_item)
-        self.enhancement_items["none"] = enhancement_none_item
+        polish_none_item.setTarget_(self)
+        polish_none_item.setTag_(0)
+        polish_menu.addItem_(polish_none_item)
+        self.polish_items["none"] = polish_none_item
 
-        enhancement_gemini_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
-            _enhancement_label("gemini", available=_gemini_available()),
-            "selectEnhancementProvider:",
+        polish_groq_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+            _polish_label("groq", available=_groq_available()),
+            "selectPolishProvider:",
             "",
         )
-        enhancement_gemini_item.setTarget_(self)
-        enhancement_gemini_item.setTag_(1)
-        enhancement_menu.addItem_(enhancement_gemini_item)
-        self.enhancement_items["gemini"] = enhancement_gemini_item
+        polish_groq_item.setTarget_(self)
+        polish_groq_item.setTag_(1)
+        polish_menu.addItem_(polish_groq_item)
+        self.polish_items["groq"] = polish_groq_item
 
         duration_menu = NSMenu.alloc().init()
         self.duration_menu_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
@@ -279,35 +274,38 @@ class MiniDicMenuBarApp(NSObject):
         else:
             self.toggle_daemon_item.setTitle_("Stop daemon")
             runtime_state = read_runtime_state()
+            if runtime_state == "error" and button is not None:
+                error_msg = read_runtime_error() or "unknown error"
+                button.setToolTip_(f"minidic: Error — {error_msg}")
 
-        asr_settings = get_asr_settings()
-        enhancement_settings = get_enhancement_settings()
-        current_duration = get_recording_duration(default=self.args.duration)
+        settings = read_settings()
+        asr = settings["asr"]
+        polish_enabled = settings["polish"]
+        current_duration = settings["duration_seconds"]
 
-        self.args.provider = asr_settings["provider"]
-        self.args.enhancement = enhancement_settings["provider"]
+        self.args.provider = "groq" if asr == "groq" else "parakeet"
+        self.args.polish = polish_enabled
         self.args.duration = current_duration
 
         groq_available = _groq_available()
-        gemini_available = _gemini_available()
 
+        asr_provider = "groq" if asr == "groq" else "parakeet"
         if self.asr_menu_item is not None:
-            self.asr_menu_item.setTitle_(f"ASR: {_asr_label(asr_settings['provider'])}")
+            self.asr_menu_item.setTitle_(f"ASR: {_asr_label(asr_provider)}")
         for provider, item in self.asr_items.items():
-            item.setState_(1 if provider == asr_settings["provider"] else 0)
+            item.setState_(1 if provider == asr_provider else 0)
             if provider == "groq":
                 item.setTitle_(_asr_label("groq", available=groq_available))
                 item.setEnabled_(groq_available)
 
-        if self.enhancement_menu_item is not None:
-            self.enhancement_menu_item.setTitle_(
-                f"Enhancement: {_enhancement_label(enhancement_settings['provider'])}"
-            )
-        for provider, item in self.enhancement_items.items():
-            item.setState_(1 if provider == enhancement_settings["provider"] else 0)
-            if provider == "gemini":
-                item.setTitle_(_enhancement_label("gemini", available=gemini_available))
-                item.setEnabled_(gemini_available)
+        polish_provider = "groq" if polish_enabled else "none"
+        if self.polish_menu_item is not None:
+            self.polish_menu_item.setTitle_(f"Polish: {_polish_label(polish_provider)}")
+        for provider, item in self.polish_items.items():
+            item.setState_(1 if provider == polish_provider else 0)
+            if provider == "groq":
+                item.setTitle_(_polish_label("groq", available=groq_available))
+                item.setEnabled_(groq_available)
 
         if self.duration_menu_item is not None:
             self.duration_menu_item.setTitle_(f"Duration: {_format_duration(current_duration)}")
@@ -321,7 +319,7 @@ class MiniDicMenuBarApp(NSObject):
 
         if runtime_state == "recording" and self.last_runtime_state != "recording":
             self.showDictationOverlay_("Listening")
-        elif self.last_runtime_state == "recording" and runtime_state == "idle":
+        elif self.last_runtime_state == "recording" and runtime_state in ("idle", "error"):
             self.hideOverlay_(None)
 
         self.last_runtime_state = runtime_state
@@ -489,16 +487,16 @@ class MiniDicMenuBarApp(NSObject):
             return
         if provider == "groq" and not _groq_available():
             return
-        set_asr_settings({"provider": provider})
+        set_asr("groq" if provider == "groq" else "offline")
         self.refreshStatus_(None)
 
-    def selectEnhancementProvider_(self, sender: object) -> None:
-        provider = ENHANCEMENT_PROVIDER_TAGS.get(int(sender.tag()))
-        if provider is None:
+    def selectPolishProvider_(self, sender: object) -> None:
+        enabled = POLISH_TAGS.get(int(sender.tag()))
+        if enabled is None:
             return
-        if provider == "gemini" and not _gemini_available():
+        if enabled and not _groq_available():
             return
-        set_enhancement_settings({"provider": provider})
+        set_polish(enabled)
         self.refreshStatus_(None)
 
     def selectDuration_(self, sender: object) -> None:

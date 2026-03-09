@@ -28,8 +28,7 @@ On first use, macOS will prompt for the permissions required by `minidic`. In ge
 
 Environment variables:
 
-- `GROQ_API_KEY` — required when using `--provider groq`
-- `GEMINI_API_KEY` — required when using `--enhancement gemini`
+- `GROQ_API_KEY` — required when using `--asr groq` or `--polish`
 
 ### Console
 
@@ -37,13 +36,13 @@ Run an interactive dictation session in the terminal. It records from your micro
 
 ```bash
 minidic console
-minidic console --provider groq
-minidic console --enhancement gemini
+minidic console --asr groq
+minidic console --polish
 ```
 
 The first time you use the default offline backend, `minidic console` will download `mlx-community/parakeet-tdt-0.6b-v3`.
 
-Use Parakeet for fully local transcription or Groq for cloud-based transcription. Gemini is optional and can improve punctuation and phrasing after transcription. You can combine `--provider groq` with `--enhancement gemini`.
+Use the offline backend (Parakeet) for local transcription or Groq for cloud-based transcription. Polish is optional and uses a Groq LLM to improve punctuation and phrasing after transcription. `--polish` enables the built-in Groq polish backend. You can combine `--asr groq` with `--polish`.
 
 ### Transcribe
 
@@ -51,8 +50,8 @@ Transcribe an existing WAV file from disk instead of recording live microphone i
 
 ```bash
 minidic transcribe path/to/file.wav
-minidic transcribe --provider groq path/to/file.wav
-minidic transcribe --enhancement gemini path/to/file.wav
+minidic transcribe --asr groq path/to/file.wav
+minidic transcribe --polish path/to/file.wav
 ```
 
 ### Menu bar
@@ -66,18 +65,18 @@ minidic menubar
 ![Menu bar icon (stopped)](https://raw.githubusercontent.com/goofansu/minidic/main/screenshots/menubar-daemon-stopped.png)
 ![Menu bar icon (running)](https://raw.githubusercontent.com/goofansu/minidic/main/screenshots/menubar-daemon-started.png)
 
-The `menubar` command itself does not accept ASR or enhancement selection flags. Use the menu bar UI to change ASR, enhancement, and duration.
+The `menubar` command itself does not accept ASR or polish selection flags. Use the menu bar UI to change ASR, polish, and duration.
 
 The menu bar UI lets you change settings without restarting the daemon; changes apply on the next transcription:
 
 1. Start menu bar mode.
 2. Optionally choose **ASR**: `Offline (Parakeet)` or `Online (Groq)`.
-3. Optionally choose **Enhancement**: `None` or `Gemini`.
+3. Optionally choose **Polish**: `No` or `Yes`.
 4. Optionally choose a max recording length from **Duration**.
 5. Click **Start daemon**.
 6. Press `F5` to toggle start/stop dictation.
 
-Groq and Gemini require their respective API keys. If a key is missing, `minidic` raises an error; in daemon mode, the error is logged to `daemon.log`.
+Groq requires `GROQ_API_KEY`. If the key is missing, `minidic` raises an error; in daemon mode, the error is logged to `daemon.log`.
 
 ## How it works
 
@@ -87,15 +86,15 @@ Groq and Gemini require their respective API keys. If a key is missing, `minidic
 
 - **Offline ASR:** `parakeet-mlx` on Apple Silicon via MLX
 - **Online ASR:** Groq Whisper (`whisper-large-v3-turbo`)
-- **Enhancement model:** `gemini-3.1-flash-lite-preview`
+- **Polish model:** Groq `llama-3.1-8b-instant`
 
 ### High-level pipeline
 
 1. Capture mic audio with `sounddevice`
 2. Resample to 16 kHz with `soxr` when needed
-3. Transcribe with Parakeet or Groq depending on `asr.provider`
+3. Transcribe with Parakeet or Groq depending on `asr`
 4. Apply local regex cleanup by default to remove filler words like `um` and `uh`
-5. Optionally run Gemini enhancement when enabled
+5. Optionally run Groq polish when enabled
 6. Inject text into the active app on macOS in daemon mode
 
 The daemon mode is hotkey-driven and lazily loads and unloads the ASR model to reduce idle resource usage.
@@ -104,44 +103,32 @@ The daemon mode is hotkey-driven and lazily loads and unloads the ASR model to r
 
 ```text
 ~/.minidic/
-├── settings.json          # persisted settings for `asr`, `enhancement`, and `recording`
+├── settings.json          # persisted settings for ASR, polish, and recording duration
 └── recordings/            # WAV recordings created during dictation/transcription
 
 ~/.local/state/minidic/
+├── daemon.error           # last daemon error message (transient)
 ├── daemon.log             # daemon logs
 ├── daemon.pid             # daemon process ID
-├── daemon.state           # current daemon state: idle, recording, transcribing
+├── daemon.state           # current daemon state: idle, recording, transcribing, error
 ├── menubar.log            # menu bar mode logs
 └── menubar.pid            # menu bar process ID
 ```
 
 ### Configuration
 
-`minidic` stores persistent configuration in `~/.minidic/settings.json`.
+`minidic` stores persistent configuration in `~/.minidic/settings.json` as a flat JSON object with these keys:
 
-`minidic` uses three config groups:
-
-- `asr`
-  - `provider`: `parakeet` or `groq`
-  - `model`: provider-specific internal default; not exposed in the CLI or menu bar UI
-- `enhancement`
-  - `provider`: `none` or `gemini`
-- `recording`
-  - `duration_seconds`
+- `asr`: `"offline"` or `"groq"`
+- `polish`: `true` or `false`
+- `duration_seconds`
 
 Default `settings.json`:
 
 ```json
 {
-  "asr": {
-    "model": "mlx-community/parakeet-tdt-0.6b-v3",
-    "provider": "parakeet"
-  },
-  "enhancement": {
-    "provider": "none"
-  },
-  "recording": {
-    "duration_seconds": 60.0
-  }
+  "asr": "offline",
+  "duration_seconds": 60.0,
+  "polish": false
 }
 ```
