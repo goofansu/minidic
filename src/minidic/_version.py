@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 _PACKAGE_ROOT = Path(__file__).resolve().parent
-__version__ = "1.2.2"
+__version__ = "1.2.3"
 
 
 def _git_short_hash() -> str | None:
