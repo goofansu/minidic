@@ -16,12 +16,12 @@ import numpy as np
 import parakeet_mlx
 
 from minidic.audio import TARGET_RATE
-from minidic.text_processing import GeminiSmoother, RegexSmoother
+from minidic.text_processing import GroqSmoother, RegexSmoother
 
 logger = logging.getLogger(__name__)
 
 ASRProvider = Literal["parakeet", "groq"]
-EnhancementProvider = Literal["none", "gemini"]
+EnhancementProvider = Literal["none", "groq"]
 
 DEFAULT_MODEL = "mlx-community/parakeet-tdt-0.6b-v3"
 GROQ_DEFAULT_MODEL = "whisper-large-v3-turbo"
@@ -39,9 +39,9 @@ class _BaseTranscriber:
         self.strip_fillers = strip_fillers
         self._regex_smoother = RegexSmoother() if strip_fillers else None
         self._enhancement_provider = config.provider
-        self._smoother: GeminiSmoother | None = None
-        if self._enhancement_provider == "gemini":
-            self._smoother = GeminiSmoother()
+        self._smoother: GroqSmoother | None = None
+        if self._enhancement_provider == "groq":
+            self._smoother = GroqSmoother()
 
     def load(self) -> None:
         raise NotImplementedError
@@ -54,21 +54,18 @@ class _BaseTranscriber:
             return
 
         self._enhancement_provider = provider
-        if provider == "gemini":
-            self._smoother = GeminiSmoother()
+        if provider == "groq":
+            self._smoother = GroqSmoother()
         else:
             self._smoother = None
-
-    def set_gemini_enabled(self, enabled: bool) -> None:
-        self.set_enhancement("gemini" if enabled else "none")
 
     def _clean_text(self, text: str) -> str:
         cleaned = text.strip()
         if self._regex_smoother is not None:
             cleaned = self._regex_smoother.smooth(cleaned)
-        if self._enhancement_provider == "gemini":
+        if self._enhancement_provider == "groq":
             if self._smoother is None:
-                self._smoother = GeminiSmoother()
+                self._smoother = GroqSmoother()
             cleaned = self._smoother.smooth(cleaned)
         return cleaned
 
@@ -265,9 +262,6 @@ class Transcriber:
         )
         self._backend.set_enhancement(provider)
 
-    def set_gemini_enabled(self, enabled: bool) -> None:
-        self._backend.set_gemini_enabled(enabled)
-
     def transcribe(self, audio_f32: np.ndarray) -> str:
         return self._backend.transcribe(audio_f32)
 
@@ -324,7 +318,7 @@ def validate_transcriber_settings(
 ) -> None:
     if asr_provider not in {"parakeet", "groq"}:
         raise ValueError(f"Unsupported ASR provider: {asr_provider}")
-    if enhancement_provider not in {"none", "gemini"}:
+    if enhancement_provider not in {"none", "groq"}:
         raise ValueError(f"Unsupported enhancement provider: {enhancement_provider}")
 
 

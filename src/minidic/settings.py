@@ -18,7 +18,7 @@ DEFAULT_PROVIDER = "parakeet"
 DEFAULT_ENHANCEMENT_PROVIDER = "none"
 
 ASRProvider = Literal["parakeet", "groq"]
-EnhancementProvider = Literal["none", "gemini"]
+EnhancementProvider = Literal["none", "groq"]
 
 
 class AsrSettings(TypedDict):
@@ -79,7 +79,7 @@ def _normalize_asr_provider(value: object, *, default: ASRProvider) -> ASRProvid
 def _normalize_enhancement_provider(
     value: object, *, default: EnhancementProvider
 ) -> EnhancementProvider:
-    if value in {"none", "gemini"}:
+    if value in {"none", "groq"}:
         return cast(EnhancementProvider, value)
     return default
 
@@ -218,20 +218,6 @@ def get_recording_settings() -> RecordingSettings:
 def set_recording_settings(recording: Mapping[str, object]) -> None:
     settings = read_settings()
     settings["recording"] = _validate_recording_settings(recording, default=settings["recording"])
-    write_settings(settings)
-
-
-def get_gemini_enabled(*, default: bool = False) -> bool:
-    settings = read_settings()
-    provider = settings["enhancement"]["provider"]
-    if provider in {"none", "gemini"}:
-        return provider == "gemini"
-    return default
-
-
-def set_gemini_enabled(enabled: bool) -> None:
-    settings = read_settings()
-    settings["enhancement"]["provider"] = "gemini" if enabled else "none"
     write_settings(settings)
 
 

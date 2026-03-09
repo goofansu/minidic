@@ -29,7 +29,7 @@ def _add_common_options(parser: argparse.ArgumentParser, *, include_duration: bo
     )
     parser.add_argument(
         "--enhancement",
-        choices=("none", "gemini"),
+        choices=("none", "groq"),
         default=DEFAULT_ENHANCEMENT_PROVIDER,
         help="Transcript enhancement provider (default: none)",
     )

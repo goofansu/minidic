@@ -9,7 +9,7 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-GEMINI_MODEL = "gemini-3.1-flash-lite-preview"
+GROQ_ENHANCEMENT_MODEL = "llama-3.1-8b-instant"
 
 # Filler words / hesitation sounds to strip from transcription output.
 # Matched case-insensitively as whole words.
@@ -48,11 +48,11 @@ def remove_fillers(text: str) -> str:
     return RegexSmoother().smooth(text)
 
 
-class GeminiSmoother:
-    """Optional transcript post-processor backed by Gemini."""
+class GroqSmoother:
+    """Optional transcript post-processor backed by a small Groq LLM."""
 
     def __init__(self) -> None:
-        self._api_key = os.environ.get("GEMINI_API_KEY", "").strip()
+        self._api_key = os.environ.get("GROQ_API_KEY", "").strip()
         self._client: Any | None = None
         self._disabled = False
 
@@ -61,16 +61,16 @@ class GeminiSmoother:
             return
 
         try:
-            from google import genai as _genai
+            from groq import Groq as _Groq
         except Exception:
             logger.warning(
-                "GEMINI_API_KEY is set but google-genai is not installed; skipping transcript smoothing."
+                "GROQ_API_KEY is set but groq is not installed; skipping transcript smoothing."
             )
             self._disabled = True
             return
 
-        self._client = _genai.Client(api_key=self._api_key)
-        logger.info("Gemini transcript smoothing enabled (%s).", GEMINI_MODEL)
+        self._client = _Groq(api_key=self._api_key)
+        logger.info("Groq transcript smoothing enabled (%s).", GROQ_ENHANCEMENT_MODEL)
 
     @property
     def enabled(self) -> bool:
@@ -82,28 +82,32 @@ class GeminiSmoother:
 
         assert self._client is not None
 
-        prompt = (
-            "You clean up raw speech-to-text output for dictation. "
-            "Preserve original meaning and language. "
-            "Fix punctuation/casing and smooth awkward phrasing. "
-            "Do not add new facts. "
-            "Return only the final rewritten text.\n\n"
-            f"Transcript:\n{text}"
-        )
-
         try:
-            response = self._client.models.generate_content(
-                model=GEMINI_MODEL,
-                contents=prompt,
-                config={"thinking_config": {"thinking_budget": 0}},
+            response = self._client.chat.completions.create(
+                model=GROQ_ENHANCEMENT_MODEL,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You clean up raw speech-to-text output for dictation. "
+                            "Preserve original meaning and language. "
+                            "Fix punctuation/casing and smooth awkward phrasing. "
+                            "Do not add new facts. "
+                            "Return only the final rewritten text."
+                        ),
+                    },
+                    {"role": "user", "content": text},
+                ],
+                max_tokens=1024,
+                temperature=0,
             )
         except Exception:
-            logger.exception("Gemini smoothing failed; using raw transcript.")
+            logger.exception("Groq smoothing failed; using raw transcript.")
             return text
 
-        smoothed = (getattr(response, "text", "") or "").strip()
+        smoothed = (response.choices[0].message.content or "").strip()
         if smoothed:
             return smoothed
 
-        logger.warning("Gemini smoothing returned empty text; using raw transcript.")
+        logger.warning("Groq smoothing returned empty text; using raw transcript.")
         return text

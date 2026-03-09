@@ -52,7 +52,7 @@ from minidic.settings import (
 )
 
 ASR_PROVIDER_TAGS = {0: "parakeet", 1: "groq"}
-ENHANCEMENT_PROVIDER_TAGS = {0: "none", 1: "gemini"}
+ENHANCEMENT_PROVIDER_TAGS = {0: "none", 1: "groq"}
 DURATION_PRESETS = (15.0, 30.0, 60.0, 90.0, 120.0)
 
 
@@ -99,10 +99,6 @@ def _groq_available() -> bool:
     return bool(os.environ.get("GROQ_API_KEY", "").strip())
 
 
-def _gemini_available() -> bool:
-    return bool(os.environ.get("GEMINI_API_KEY", "").strip())
-
-
 def _asr_label(provider: str, *, available: bool | None = None) -> str:
     if provider == "groq":
         if available is False:
@@ -112,10 +108,10 @@ def _asr_label(provider: str, *, available: bool | None = None) -> str:
 
 
 def _enhancement_label(provider: str, *, available: bool | None = None) -> str:
-    if provider == "gemini":
+    if provider == "groq":
         if available is False:
-            return "Gemini — requires GEMINI_API_KEY"
-        return "Gemini"
+            return "Groq — requires GROQ_API_KEY"
+        return "Groq"
     return "None"
 
 
@@ -203,15 +199,15 @@ class MiniDicMenuBarApp(NSObject):
         enhancement_menu.addItem_(enhancement_none_item)
         self.enhancement_items["none"] = enhancement_none_item
 
-        enhancement_gemini_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
-            _enhancement_label("gemini", available=_gemini_available()),
+        enhancement_groq_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+            _enhancement_label("groq", available=_groq_available()),
             "selectEnhancementProvider:",
             "",
         )
-        enhancement_gemini_item.setTarget_(self)
-        enhancement_gemini_item.setTag_(1)
-        enhancement_menu.addItem_(enhancement_gemini_item)
-        self.enhancement_items["gemini"] = enhancement_gemini_item
+        enhancement_groq_item.setTarget_(self)
+        enhancement_groq_item.setTag_(1)
+        enhancement_menu.addItem_(enhancement_groq_item)
+        self.enhancement_items["groq"] = enhancement_groq_item
 
         duration_menu = NSMenu.alloc().init()
         self.duration_menu_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
@@ -289,7 +285,6 @@ class MiniDicMenuBarApp(NSObject):
         self.args.duration = current_duration
 
         groq_available = _groq_available()
-        gemini_available = _gemini_available()
 
         if self.asr_menu_item is not None:
             self.asr_menu_item.setTitle_(f"ASR: {_asr_label(asr_settings['provider'])}")
@@ -305,9 +300,9 @@ class MiniDicMenuBarApp(NSObject):
             )
         for provider, item in self.enhancement_items.items():
             item.setState_(1 if provider == enhancement_settings["provider"] else 0)
-            if provider == "gemini":
-                item.setTitle_(_enhancement_label("gemini", available=gemini_available))
-                item.setEnabled_(gemini_available)
+            if provider == "groq":
+                item.setTitle_(_enhancement_label("groq", available=groq_available))
+                item.setEnabled_(groq_available)
 
         if self.duration_menu_item is not None:
             self.duration_menu_item.setTitle_(f"Duration: {_format_duration(current_duration)}")
@@ -496,7 +491,7 @@ class MiniDicMenuBarApp(NSObject):
         provider = ENHANCEMENT_PROVIDER_TAGS.get(int(sender.tag()))
         if provider is None:
             return
-        if provider == "gemini" and not _gemini_available():
+        if provider == "groq" and not _groq_available():
             return
         set_enhancement_settings({"provider": provider})
         self.refreshStatus_(None)
