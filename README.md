@@ -86,7 +86,7 @@ Groq requires `GROQ_API_KEY`. If the key is missing, `minidic` raises an error; 
 
 - **Offline ASR:** `parakeet-mlx` on Apple Silicon via MLX
 - **Online ASR:** Groq Whisper (`whisper-large-v3-turbo`)
-- **Polish model:** Groq `llama-3.1-8b-instant`
+- **Polish model:** Groq `openai/gpt-oss-20b`
 
 ### High-level pipeline
 

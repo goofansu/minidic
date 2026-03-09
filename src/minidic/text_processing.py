@@ -9,7 +9,7 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-GROQ_POLISH_MODEL = "llama-3.1-8b-instant"
+GROQ_POLISH_MODEL = "openai/gpt-oss-20b"
 
 # Filler words / hesitation sounds to strip from transcription output.
 # Matched case-insensitively as whole words.
