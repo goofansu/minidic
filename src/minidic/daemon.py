@@ -18,17 +18,13 @@ from minidic.audio import AudioStream, TARGET_RATE, int16_to_float32
 from minidic.inject import inject_text
 from minidic.runtime.process import DAEMON_PID_FILE
 from minidic.runtime.state import clear_runtime_error, clear_runtime_state, write_runtime_error, write_runtime_state
-from minidic.settings import get_asr, get_polish, get_recording_duration
+from minidic.settings import get_polish, get_provider, get_recording_duration
 from minidic.transcribe import Transcriber
 
 logger = logging.getLogger(__name__)
 
 _MINIDIC_DIR = Path.home() / ".minidic"
 _MODEL_IDLE_UNLOAD_SECONDS = 30 * 60
-
-
-def _asr_to_provider(asr: str) -> str:
-    return "whisper" if asr == "groq" else "parakeet"
 
 
 def _save_wav(chunks: list[np.ndarray]) -> Path:
@@ -63,7 +59,7 @@ def run_daemon(args: argparse.Namespace) -> None:
     signal.signal(signal.SIGTERM, _on_sigterm)
 
     transcriber = Transcriber(
-        provider=_asr_to_provider(get_asr()),
+        provider=get_provider(),
         polish=get_polish(),
     )
     model_loaded = False
@@ -158,7 +154,7 @@ def run_daemon(args: argparse.Namespace) -> None:
     def _ensure_transcriber_current() -> None:
         nonlocal transcriber, model_loaded, last_model_use, backend_name
 
-        desired = Transcriber(provider=_asr_to_provider(get_asr()), polish=False)
+        desired = Transcriber(provider=get_provider(), polish=False)
         if _transcriber_signature(desired) == _transcriber_signature(transcriber):
             return
 

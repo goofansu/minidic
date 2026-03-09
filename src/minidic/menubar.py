@@ -45,12 +45,12 @@ from minidic.runtime.state import read_runtime_error, read_runtime_state
 from minidic.settings import (
     get_recording_duration,
     read_settings,
-    set_asr,
+    set_online,
     set_polish,
     set_recording_duration,
 )
 
-ASR_PROVIDER_TAGS = {0: "parakeet", 1: "whisper"}
+ASR_ONLINE_TAGS = {0: False, 1: True}
 POLISH_TAGS = {0: False, 1: True}
 DURATION_PRESETS = (15.0, 30.0, 60.0, 90.0, 120.0)
 
@@ -101,8 +101,8 @@ def _groq_available() -> bool:
 def _asr_label(provider: str, *, available: bool | None = None) -> str:
     if provider == "whisper":
         if available is False:
-            return "Online (Groq) — requires GROQ_API_KEY"
-        return "Online (Groq)"
+            return "Online (Groq Whisper) — requires GROQ_API_KEY"
+        return "Online (Groq Whisper)"
     return "Offline (Parakeet)"
 
 
@@ -163,7 +163,7 @@ class MiniDicMenuBarApp(NSObject):
         self.menu.addItem_(self.toggle_daemon_item)
 
         asr_menu = NSMenu.alloc().init()
-        self.asr_menu_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("ASR", None, "")
+        self.asr_menu_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(_asr_label("parakeet"), None, "")
         self.menu.addItem_(self.asr_menu_item)
         self.menu.setSubmenu_forItem_(asr_menu, self.asr_menu_item)
 
@@ -279,19 +279,20 @@ class MiniDicMenuBarApp(NSObject):
                 button.setToolTip_(f"minidic: Error — {error_msg}")
 
         settings = read_settings()
-        asr = settings["asr"]
+        online = settings["online"]
         polish_enabled = settings["polish"]
         current_duration = settings["duration_seconds"]
 
-        self.args.provider = "whisper" if asr == "groq" else "parakeet"
+        self.args.online = online
+        self.args.provider = "whisper" if online else "parakeet"
         self.args.polish = polish_enabled
         self.args.duration = current_duration
 
         groq_available = _groq_available()
 
-        selected_provider = "whisper" if asr == "groq" else "parakeet"
+        selected_provider = "whisper" if online else "parakeet"
         if self.asr_menu_item is not None:
-            self.asr_menu_item.setTitle_(f"ASR: {_asr_label(selected_provider)}")
+            self.asr_menu_item.setTitle_(_asr_label(selected_provider))
         for provider, item in self.asr_items.items():
             item.setState_(1 if provider == selected_provider else 0)
             if provider == "whisper":
@@ -482,12 +483,12 @@ class MiniDicMenuBarApp(NSObject):
         self.refreshStatus_(None)
 
     def selectAsrProvider_(self, sender: object) -> None:
-        provider = ASR_PROVIDER_TAGS.get(int(sender.tag()))
-        if provider is None:
+        online = ASR_ONLINE_TAGS.get(int(sender.tag()))
+        if online is None:
             return
-        if provider == "whisper" and not _groq_available():
+        if online and not _groq_available():
             return
-        set_asr("groq" if provider == "whisper" else "offline")
+        set_online(online)
         self.refreshStatus_(None)
 
     def selectPolishProvider_(self, sender: object) -> None:

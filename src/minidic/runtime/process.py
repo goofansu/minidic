@@ -92,7 +92,8 @@ def build_minidic_command(args: argparse.Namespace, subcommand: str) -> list[str
     if args.verbose:
         cmd.append("--verbose")
 
-    cmd.extend(["--asr", "groq" if args.provider == "groq" else "offline"])
+    if args.online:
+        cmd.append("--online")
     if args.polish:
         cmd.append("--polish")
     cmd.extend(["--duration", str(args.duration)])

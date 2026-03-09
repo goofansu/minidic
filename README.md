@@ -28,21 +28,22 @@ On first use, macOS will prompt for the permissions required by `minidic`. In ge
 
 Environment variables:
 
-- `GROQ_API_KEY` — required when using `--asr groq` or `--polish`
+- `GROQ_API_KEY` — required when using `--online` or `--polish`
 
 ### Console
 
 Run an interactive dictation session in the terminal. It records from your microphone, transcribes speech, and prints the result.
 
+By default, `minidic` uses the offline Parakeet backend for local transcription. On first use it will download `mlx-community/parakeet-tdt-0.6b-v3` (~2 GB).
+
 ```bash
 minidic console
-minidic console --asr groq
+minidic console --online
 minidic console --polish
+minidic console --online --polish
 ```
 
-The first time you use the default offline backend, `minidic console` will download `mlx-community/parakeet-tdt-0.6b-v3`.
-
-Use the offline backend (Parakeet) for local transcription or Groq for cloud-based transcription. Polish is optional and uses a Groq LLM to improve punctuation and phrasing after transcription. `--polish` enables the built-in Groq polish backend. You can combine `--asr groq` with `--polish`.
+`--online` switches to Groq Whisper. `--polish` enables the built-in Groq polish backend for punctuation and phrasing cleanup after transcription.
 
 ### Transcribe
 
@@ -50,8 +51,9 @@ Transcribe an existing WAV file from disk instead of recording live microphone i
 
 ```bash
 minidic transcribe path/to/file.wav
-minidic transcribe --asr groq path/to/file.wav
+minidic transcribe --online path/to/file.wav
 minidic transcribe --polish path/to/file.wav
+minidic transcribe --online --polish path/to/file.wav
 ```
 
 ### Menu bar
@@ -65,18 +67,18 @@ minidic menubar
 ![Menu bar icon (stopped)](https://raw.githubusercontent.com/goofansu/minidic/main/screenshots/menubar-daemon-stopped.png)
 ![Menu bar icon (running)](https://raw.githubusercontent.com/goofansu/minidic/main/screenshots/menubar-daemon-started.png)
 
-The `menubar` command itself does not accept ASR or polish selection flags. Use the menu bar UI to change ASR, polish, and duration.
+The `menubar` command itself does not accept online or polish flags. Use the menu bar UI to change backend, polish, and duration.
 
 The menu bar UI lets you change settings without restarting the daemon; changes apply on the next transcription:
 
 1. Start menu bar mode.
-2. Optionally choose **ASR**: `Offline (Parakeet)` or `Online (Groq)`.
+2. Optionally choose **Backend**: `Offline (Parakeet)` or `Online (Groq Whisper)`.
 3. Optionally choose **Polish**: `No` or `Yes`.
 4. Optionally choose a max recording length from **Duration**.
 5. Click **Start daemon**.
 6. Press `F5` to toggle start/stop dictation.
 
-Groq requires `GROQ_API_KEY`. If the key is missing, `minidic` raises an error; in daemon mode, the error is logged to `daemon.log`.
+Groq features require `GROQ_API_KEY`. If the key is missing, `minidic` raises an error; in daemon mode, the error is logged to `daemon.log`.
 
 ## How it works
 
@@ -84,15 +86,15 @@ Groq requires `GROQ_API_KEY`. If the key is missing, `minidic` raises an error; 
 
 ### Models used
 
-- **Offline ASR:** `parakeet-mlx` on Apple Silicon via MLX
-- **Online ASR:** Groq Whisper (`whisper-large-v3-turbo`)
+- **Offline ASR:** `mlx-community/parakeet-tdt-0.6b-v3`
+- **Online ASR:** Groq `whisper-large-v3-turbo`
 - **Polish model:** Groq `openai/gpt-oss-20b`
 
 ### High-level pipeline
 
 1. Capture mic audio with `sounddevice`
 2. Resample to 16 kHz with `soxr` when needed
-3. Transcribe with Parakeet or Groq depending on `asr`
+3. Transcribe with Parakeet or Groq depending on whether `online` is enabled
 4. Apply local regex cleanup by default to remove filler words like `um` and `uh`
 5. Optionally run Groq polish when enabled
 6. Inject text into the active app on macOS in daemon mode
@@ -103,7 +105,7 @@ The daemon mode is hotkey-driven and lazily loads and unloads the ASR model to r
 
 ```text
 ~/.minidic/
-├── settings.json          # persisted settings for ASR, polish, and recording duration
+├── settings.json          # persisted settings for online mode, polish, and recording duration
 └── recordings/            # WAV recordings created during dictation/transcription
 
 ~/.local/state/minidic/
@@ -119,7 +121,7 @@ The daemon mode is hotkey-driven and lazily loads and unloads the ASR model to r
 
 `minidic` stores persistent configuration in `~/.minidic/settings.json` as a flat JSON object with these keys:
 
-- `asr`: `"offline"` or `"groq"`
+- `online`: `true` or `false`
 - `polish`: `true` or `false`
 - `duration_seconds`
 
@@ -127,8 +129,8 @@ Default `settings.json`:
 
 ```json
 {
-  "asr": "offline",
   "duration_seconds": 60.0,
+  "online": false,
   "polish": false
 }
 ```

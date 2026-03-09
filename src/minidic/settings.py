@@ -6,38 +6,30 @@ import json
 import os
 import tempfile
 from pathlib import Path
-from typing import Literal, Mapping, TypedDict, cast
+from typing import Mapping, TypedDict
 
 _SETTINGS_DIR = Path.home() / ".minidic"
 SETTINGS_FILE = _SETTINGS_DIR / "settings.json"
 
 DEFAULT_DURATION_SECONDS = 60.0
-DEFAULT_ASR = "offline"
+DEFAULT_ONLINE = False
 DEFAULT_POLISH = False
-
-ASR = Literal["offline", "groq"]
 
 
 class Settings(TypedDict):
-    asr: ASR
+    online: bool
     polish: bool
     duration_seconds: float
 
 
 DEFAULT_SETTINGS: Settings = {
-    "asr": DEFAULT_ASR,
+    "online": DEFAULT_ONLINE,
     "polish": DEFAULT_POLISH,
     "duration_seconds": DEFAULT_DURATION_SECONDS,
 }
 
 
-def _normalize_asr(value: object, *, default: ASR) -> ASR:
-    if value in {"offline", "groq"}:
-        return cast(ASR, value)
-    return default
-
-
-def _normalize_polish(value: object, *, default: bool) -> bool:
+def _normalize_bool(value: object, *, default: bool) -> bool:
     if isinstance(value, bool):
         return value
     return default
@@ -56,11 +48,8 @@ def _normalize_duration_seconds(value: object, *, default: float) -> float:
 def validate_settings(data: object) -> Settings:
     payload = data if isinstance(data, Mapping) else {}
     return {
-        "asr": _normalize_asr(payload.get("asr"), default=DEFAULT_SETTINGS["asr"]),
-        "polish": _normalize_polish(
-            payload.get("polish"),
-            default=DEFAULT_SETTINGS["polish"],
-        ),
+        "online": _normalize_bool(payload.get("online"), default=DEFAULT_SETTINGS["online"]),
+        "polish": _normalize_bool(payload.get("polish"), default=DEFAULT_SETTINGS["polish"]),
         "duration_seconds": _normalize_duration_seconds(
             payload.get("duration_seconds"), default=DEFAULT_SETTINGS["duration_seconds"]
         ),
@@ -116,13 +105,17 @@ def write_settings(settings: Mapping[str, object]) -> None:
                 pass
 
 
-def get_asr() -> ASR:
-    return read_settings()["asr"]
+def get_online() -> bool:
+    return read_settings()["online"]
 
 
-def set_asr(asr: ASR) -> None:
+def get_provider() -> str:
+    return "whisper" if get_online() else "parakeet"
+
+
+def set_online(enabled: bool) -> None:
     settings = read_settings()
-    settings["asr"] = _normalize_asr(asr, default=settings["asr"])
+    settings["online"] = _normalize_bool(enabled, default=settings["online"])
     write_settings(settings)
 
 
@@ -132,7 +125,7 @@ def get_polish() -> bool:
 
 def set_polish(enabled: bool) -> None:
     settings = read_settings()
-    settings["polish"] = _normalize_polish(enabled, default=settings["polish"])
+    settings["polish"] = _normalize_bool(enabled, default=settings["polish"])
     write_settings(settings)
 
 
