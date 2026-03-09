@@ -43,17 +43,15 @@ from minidic.runtime.process import (
 )
 from minidic.runtime.state import read_runtime_error, read_runtime_state
 from minidic.settings import (
-    get_asr_provider,
-    get_polish_provider,
     get_recording_duration,
     read_settings,
-    set_asr_provider,
-    set_polish_provider,
+    set_asr,
+    set_polish,
     set_recording_duration,
 )
 
 ASR_PROVIDER_TAGS = {0: "parakeet", 1: "groq"}
-POLISH_PROVIDER_TAGS = {0: "none", 1: "groq"}
+POLISH_TAGS = {0: False, 1: True}
 DURATION_PRESETS = (15.0, 30.0, 60.0, 90.0, 120.0)
 
 
@@ -111,9 +109,9 @@ def _asr_label(provider: str, *, available: bool | None = None) -> str:
 def _polish_label(provider: str, *, available: bool | None = None) -> str:
     if provider == "groq":
         if available is False:
-            return "Groq — requires GROQ_API_KEY"
-        return "Groq"
-    return "None"
+            return "Yes — requires GROQ_API_KEY"
+        return "Yes"
+    return "No"
 
 
 class MiniDicMenuBarApp(NSObject):
@@ -281,16 +279,17 @@ class MiniDicMenuBarApp(NSObject):
                 button.setToolTip_(f"minidic: Error — {error_msg}")
 
         settings = read_settings()
-        asr_provider = settings["asr_provider"]
-        polish_provider = settings["polish_provider"]
+        asr = settings["asr"]
+        polish_enabled = settings["polish"]
         current_duration = settings["duration_seconds"]
 
-        self.args.provider = asr_provider
-        self.args.polish = polish_provider
+        self.args.provider = "groq" if asr == "groq" else "parakeet"
+        self.args.polish = polish_enabled
         self.args.duration = current_duration
 
         groq_available = _groq_available()
 
+        asr_provider = "groq" if asr == "groq" else "parakeet"
         if self.asr_menu_item is not None:
             self.asr_menu_item.setTitle_(f"ASR: {_asr_label(asr_provider)}")
         for provider, item in self.asr_items.items():
@@ -299,6 +298,7 @@ class MiniDicMenuBarApp(NSObject):
                 item.setTitle_(_asr_label("groq", available=groq_available))
                 item.setEnabled_(groq_available)
 
+        polish_provider = "groq" if polish_enabled else "none"
         if self.polish_menu_item is not None:
             self.polish_menu_item.setTitle_(f"Polish: {_polish_label(polish_provider)}")
         for provider, item in self.polish_items.items():
@@ -487,16 +487,16 @@ class MiniDicMenuBarApp(NSObject):
             return
         if provider == "groq" and not _groq_available():
             return
-        set_asr_provider(provider)
+        set_asr("groq" if provider == "groq" else "offline")
         self.refreshStatus_(None)
 
     def selectPolishProvider_(self, sender: object) -> None:
-        provider = POLISH_PROVIDER_TAGS.get(int(sender.tag()))
-        if provider is None:
+        enabled = POLISH_TAGS.get(int(sender.tag()))
+        if enabled is None:
             return
-        if provider == "groq" and not _groq_available():
+        if enabled and not _groq_available():
             return
-        set_polish_provider(provider)
+        set_polish(enabled)
         self.refreshStatus_(None)
 
     def selectDuration_(self, sender: object) -> None:

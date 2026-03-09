@@ -28,7 +28,7 @@ On first use, macOS will prompt for the permissions required by `minidic`. In ge
 
 Environment variables:
 
-- `GROQ_API_KEY` — required when using `--provider groq` or `--polish groq`
+- `GROQ_API_KEY` — required when using `--asr groq` or `--polish`
 
 ### Console
 
@@ -36,13 +36,13 @@ Run an interactive dictation session in the terminal. It records from your micro
 
 ```bash
 minidic console
-minidic console --provider groq
-minidic console --polish groq
+minidic console --asr groq
+minidic console --polish
 ```
 
 The first time you use the default offline backend, `minidic console` will download `mlx-community/parakeet-tdt-0.6b-v3`.
 
-Use Parakeet for fully local transcription or Groq for cloud-based transcription. Polish is optional and uses a small Groq LLM to improve punctuation and phrasing after transcription. You can combine `--provider groq` with `--polish groq`.
+Use Parakeet for fully local transcription or Groq for cloud-based transcription. Polish is optional and uses a small Groq LLM to improve punctuation and phrasing after transcription. `--polish` enables the built-in Groq polish backend. You can combine `--asr groq` with `--polish`.
 
 ### Transcribe
 
@@ -50,8 +50,8 @@ Transcribe an existing WAV file from disk instead of recording live microphone i
 
 ```bash
 minidic transcribe path/to/file.wav
-minidic transcribe --provider groq path/to/file.wav
-minidic transcribe --polish groq path/to/file.wav
+minidic transcribe --asr groq path/to/file.wav
+minidic transcribe --polish path/to/file.wav
 ```
 
 ### Menu bar
@@ -71,7 +71,7 @@ The menu bar UI lets you change settings without restarting the daemon; changes 
 
 1. Start menu bar mode.
 2. Optionally choose **ASR**: `Offline (Parakeet)` or `Online (Groq)`.
-3. Optionally choose **Polish**: `None` or `Groq`.
+3. Optionally choose **Polish**: `No` or `Yes`.
 4. Optionally choose a max recording length from **Duration**.
 5. Click **Start daemon**.
 6. Press `F5` to toggle start/stop dictation.
@@ -103,7 +103,7 @@ The daemon mode is hotkey-driven and lazily loads and unloads the ASR model to r
 
 ```text
 ~/.minidic/
-├── settings.json          # persisted settings for `asr`, `polish`, and `recording`
+├── settings.json          # persisted settings for ASR, polish, and recording duration
 └── recordings/            # WAV recordings created during dictation/transcription
 
 ~/.local/state/minidic/
@@ -118,29 +118,18 @@ The daemon mode is hotkey-driven and lazily loads and unloads the ASR model to r
 
 `minidic` stores persistent configuration in `~/.minidic/settings.json`.
 
-`minidic` uses three config groups:
+`minidic` stores a flat settings object with these keys:
 
-- `asr`
-  - `provider`: `parakeet` or `groq`
-  - `model`: provider-specific internal default; not exposed in the CLI or menu bar UI
-- `polish`
-  - `provider`: `none` or `groq`
-- `recording`
-  - `duration_seconds`
+- `asr`: `"offline"` or `"groq"`
+- `polish`: `true` or `false`
+- `duration_seconds`
 
 Default `settings.json`:
 
 ```json
 {
-  "asr": {
-    "model": "mlx-community/parakeet-tdt-0.6b-v3",
-    "provider": "parakeet"
-  },
-  "polish": {
-    "provider": "none"
-  },
-  "recording": {
-    "duration_seconds": 60.0
-  }
+  "asr": "offline",
+  "duration_seconds": 60.0,
+  "polish": false
 }
 ```

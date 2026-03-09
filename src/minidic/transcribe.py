@@ -21,7 +21,6 @@ from minidic.text_processing import GroqSmoother, RegexSmoother
 logger = logging.getLogger(__name__)
 
 ASRProvider = Literal["parakeet", "groq"]
-PolishProvider = Literal["none", "groq"]
 
 DEFAULT_MODEL = "mlx-community/parakeet-tdt-0.6b-v3"
 GROQ_DEFAULT_MODEL = "whisper-large-v3-turbo"
@@ -31,16 +30,16 @@ STREAM_DEPTH = 1
 
 @dataclass(frozen=True)
 class _PolishConfig:
-    provider: PolishProvider
+    enabled: bool
 
 
 class _BaseTranscriber:
     def __init__(self, *, config: _PolishConfig, strip_fillers: bool = True) -> None:
         self.strip_fillers = strip_fillers
         self._regex_smoother = RegexSmoother() if strip_fillers else None
-        self._polish_provider = config.provider
+        self._polish_enabled = config.enabled
         self._smoother: GroqSmoother | None = None
-        if self._polish_provider == "groq":
+        if self._polish_enabled:
             self._smoother = GroqSmoother()
 
     def load(self) -> None:
@@ -49,12 +48,12 @@ class _BaseTranscriber:
     def unload(self) -> None:
         raise NotImplementedError
 
-    def set_polish(self, provider: PolishProvider) -> None:
-        if provider == self._polish_provider:
+    def set_polish(self, enabled: bool) -> None:
+        if enabled == self._polish_enabled:
             return
 
-        self._polish_provider = provider
-        if provider == "groq":
+        self._polish_enabled = enabled
+        if enabled:
             self._smoother = GroqSmoother()
         else:
             self._smoother = None
@@ -63,7 +62,7 @@ class _BaseTranscriber:
         cleaned = text.strip()
         if self._regex_smoother is not None:
             cleaned = self._regex_smoother.smooth(cleaned)
-        if self._polish_provider == "groq":
+        if self._polish_enabled:
             if self._smoother is None:
                 self._smoother = GroqSmoother()
             cleaned = self._smoother.smooth(cleaned)
@@ -225,13 +224,13 @@ class Transcriber:
         asr_provider: ASRProvider = "parakeet",
         *,
         strip_fillers: bool = True,
-        polish_provider: PolishProvider = "none",
+        polish: bool = False,
     ) -> None:
         validate_transcriber_settings(
             asr_provider=asr_provider,
-            polish_provider=polish_provider,
+            polish=polish,
         )
-        config = _PolishConfig(provider=polish_provider)
+        config = _PolishConfig(enabled=polish)
         self.asr_provider = asr_provider
         self.model_id = GROQ_DEFAULT_MODEL if asr_provider == "groq" else DEFAULT_MODEL
         self._backend: _BaseTranscriber
@@ -254,12 +253,12 @@ class Transcriber:
     def unload(self) -> None:
         self._backend.unload()
 
-    def set_polish(self, provider: PolishProvider) -> None:
+    def set_polish(self, enabled: bool) -> None:
         validate_transcriber_settings(
             asr_provider=self.asr_provider,
-            polish_provider=provider,
+            polish=enabled,
         )
-        self._backend.set_polish(provider)
+        self._backend.set_polish(enabled)
 
     def transcribe(self, audio_f32: np.ndarray) -> str:
         return self._backend.transcribe(audio_f32)
@@ -313,12 +312,12 @@ class StreamSession:
 def validate_transcriber_settings(
     *,
     asr_provider: ASRProvider,
-    polish_provider: PolishProvider,
+    polish: bool,
 ) -> None:
     if asr_provider not in {"parakeet", "groq"}:
         raise ValueError(f"Unsupported ASR provider: {asr_provider}")
-    if polish_provider not in {"none", "groq"}:
-        raise ValueError(f"Unsupported polish provider: {polish_provider}")
+    if not isinstance(polish, bool):
+        raise ValueError(f"Unsupported polish setting: {polish}")
 
 
 def _wav_upload_tuple(audio_f32: np.ndarray) -> tuple[str, bytes]:

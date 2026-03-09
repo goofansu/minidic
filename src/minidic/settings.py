@@ -12,35 +12,34 @@ _SETTINGS_DIR = Path.home() / ".minidic"
 SETTINGS_FILE = _SETTINGS_DIR / "settings.json"
 
 DEFAULT_DURATION_SECONDS = 60.0
-DEFAULT_PROVIDER = "parakeet"
-DEFAULT_POLISH_PROVIDER = "none"
+DEFAULT_ASR = "offline"
+DEFAULT_POLISH = False
 
-ASRProvider = Literal["parakeet", "groq"]
-PolishProvider = Literal["none", "groq"]
+ASR = Literal["offline", "groq"]
 
 
 class Settings(TypedDict):
-    asr_provider: ASRProvider
-    polish_provider: PolishProvider
+    asr: ASR
+    polish: bool
     duration_seconds: float
 
 
 DEFAULT_SETTINGS: Settings = {
-    "asr_provider": DEFAULT_PROVIDER,
-    "polish_provider": DEFAULT_POLISH_PROVIDER,
+    "asr": DEFAULT_ASR,
+    "polish": DEFAULT_POLISH,
     "duration_seconds": DEFAULT_DURATION_SECONDS,
 }
 
 
-def _normalize_asr_provider(value: object, *, default: ASRProvider) -> ASRProvider:
-    if value in {"parakeet", "groq"}:
-        return cast(ASRProvider, value)
+def _normalize_asr(value: object, *, default: ASR) -> ASR:
+    if value in {"offline", "groq"}:
+        return cast(ASR, value)
     return default
 
 
-def _normalize_polish_provider(value: object, *, default: PolishProvider) -> PolishProvider:
-    if value in {"none", "groq"}:
-        return cast(PolishProvider, value)
+def _normalize_polish(value: object, *, default: bool) -> bool:
+    if isinstance(value, bool):
+        return value
     return default
 
 
@@ -57,11 +56,10 @@ def _normalize_duration_seconds(value: object, *, default: float) -> float:
 def validate_settings(data: object) -> Settings:
     payload = data if isinstance(data, Mapping) else {}
     return {
-        "asr_provider": _normalize_asr_provider(
-            payload.get("asr_provider"), default=DEFAULT_SETTINGS["asr_provider"]
-        ),
-        "polish_provider": _normalize_polish_provider(
-            payload.get("polish_provider"), default=DEFAULT_SETTINGS["polish_provider"]
+        "asr": _normalize_asr(payload.get("asr"), default=DEFAULT_SETTINGS["asr"]),
+        "polish": _normalize_polish(
+            payload.get("polish"),
+            default=DEFAULT_SETTINGS["polish"],
         ),
         "duration_seconds": _normalize_duration_seconds(
             payload.get("duration_seconds"), default=DEFAULT_SETTINGS["duration_seconds"]
@@ -84,7 +82,10 @@ def read_settings() -> Settings:
         if not SETTINGS_FILE.exists():
             write_settings(defaults)
         return defaults
-    return validate_settings(data)
+    settings = validate_settings(data)
+    if any(data.get(k) != v for k, v in settings.items()):
+        write_settings(settings)
+    return settings
 
 
 def write_settings(settings: Mapping[str, object]) -> None:
@@ -115,25 +116,23 @@ def write_settings(settings: Mapping[str, object]) -> None:
                 pass
 
 
-def get_asr_provider() -> ASRProvider:
-    return read_settings()["asr_provider"]
+def get_asr() -> ASR:
+    return read_settings()["asr"]
 
 
-def set_asr_provider(provider: ASRProvider) -> None:
+def set_asr(asr: ASR) -> None:
     settings = read_settings()
-    settings["asr_provider"] = _normalize_asr_provider(provider, default=settings["asr_provider"])
+    settings["asr"] = _normalize_asr(asr, default=settings["asr"])
     write_settings(settings)
 
 
-def get_polish_provider() -> PolishProvider:
-    return read_settings()["polish_provider"]
+def get_polish() -> bool:
+    return read_settings()["polish"]
 
 
-def set_polish_provider(provider: PolishProvider) -> None:
+def set_polish(enabled: bool) -> None:
     settings = read_settings()
-    settings["polish_provider"] = _normalize_polish_provider(
-        provider, default=settings["polish_provider"]
-    )
+    settings["polish"] = _normalize_polish(enabled, default=settings["polish"])
     write_settings(settings)
 
 

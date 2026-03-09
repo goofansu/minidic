@@ -72,7 +72,7 @@ def run_interactive(args: argparse.Namespace) -> None:
 
     transcriber = Transcriber(
         asr_provider=args.provider,
-        polish_provider=args.polish,
+        polish=args.polish,
     )
     backend_name = "Groq ASR" if args.provider == "groq" else "ASR model"
     print(f"Loading {backend_name} ({transcriber.model_id}) …", flush=True)
@@ -255,7 +255,7 @@ def cmd_transcribe(args: argparse.Namespace) -> None:
 
     transcriber = Transcriber(
         asr_provider=args.provider,
-        polish_provider=args.polish,
+        polish=args.polish,
     )
     transcriber.load()
 

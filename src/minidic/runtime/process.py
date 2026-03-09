@@ -93,7 +93,8 @@ def build_minidic_command(args: argparse.Namespace, subcommand: str) -> list[str
         cmd.append("--verbose")
 
     cmd.extend(["--provider", args.provider])
-    cmd.extend(["--polish", args.polish])
+    if args.polish:
+        cmd.append("--polish")
     cmd.extend(["--duration", str(args.duration)])
     return cmd
 
