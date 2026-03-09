@@ -289,11 +289,11 @@ class MiniDicMenuBarApp(NSObject):
 
         groq_available = _groq_available()
 
-        asr_provider = "groq" if asr == "groq" else "parakeet"
+        selected_provider = "groq" if asr == "groq" else "parakeet"
         if self.asr_menu_item is not None:
-            self.asr_menu_item.setTitle_(f"ASR: {_asr_label(asr_provider)}")
+            self.asr_menu_item.setTitle_(f"ASR: {_asr_label(selected_provider)}")
         for provider, item in self.asr_items.items():
-            item.setState_(1 if provider == asr_provider else 0)
+            item.setState_(1 if provider == selected_provider else 0)
             if provider == "groq":
                 item.setTitle_(_asr_label("groq", available=groq_available))
                 item.setEnabled_(groq_available)

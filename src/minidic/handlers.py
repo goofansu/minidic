@@ -27,7 +27,7 @@ from minidic.runtime.process import (
     write_menubar_lock_metadata,
 )
 from minidic.runtime.state import clear_runtime_state
-from minidic.transcribe import Transcriber
+from minidic.transcribe import Transcriber, DEFAULT_MODEL, GROQ_DEFAULT_MODEL
 
 logger = logging.getLogger(__name__)
 
@@ -70,11 +70,11 @@ def setup_logging(verbose: bool, *, to_file: bool = False) -> None:
 def run_interactive(args: argparse.Namespace) -> None:
     setup_logging(args.verbose)
 
+    backend_name = "Groq ASR" if args.provider == "groq" else "ASR model"
     transcriber = Transcriber(
-        asr_provider=args.provider,
+        provider=args.provider,
         polish=args.polish,
     )
-    backend_name = "Groq ASR" if args.provider == "groq" else "ASR model"
     print(f"Loading {backend_name} ({transcriber.model_id}) …", flush=True)
     transcriber.load()
     print("ASR model ready.", flush=True)
@@ -254,7 +254,7 @@ def cmd_transcribe(args: argparse.Namespace) -> None:
     print(f"Transcribing {duration:.1f}s of audio …", file=sys.stderr, flush=True)
 
     transcriber = Transcriber(
-        asr_provider=args.provider,
+        provider=args.provider,
         polish=args.polish,
     )
     transcriber.load()

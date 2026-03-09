@@ -103,7 +103,7 @@ class GroqSmoother:
             )
             smoothed = (response.choices[0].message.content or "").strip()
         except Exception:
-            logger.exception("Groq smoothing failed; using raw transcript.")
+            logger.warning("Groq smoothing failed; using raw transcript.", exc_info=True)
             return text
 
         if smoothed:

@@ -221,20 +221,20 @@ class Transcriber:
 
     def __init__(
         self,
-        asr_provider: ASRProvider = "parakeet",
+        provider: ASRProvider = "parakeet",
         *,
         strip_fillers: bool = True,
         polish: bool = False,
     ) -> None:
         validate_transcriber_settings(
-            asr_provider=asr_provider,
+            provider=provider,
             polish=polish,
         )
         config = _PolishConfig(enabled=polish)
-        self.asr_provider = asr_provider
-        self.model_id = GROQ_DEFAULT_MODEL if asr_provider == "groq" else DEFAULT_MODEL
+        self.provider = provider
+        self.model_id = GROQ_DEFAULT_MODEL if provider == "groq" else DEFAULT_MODEL
         self._backend: _BaseTranscriber
-        if asr_provider == "groq":
+        if provider == "groq":
             self._backend = _GroqTranscriber(
                 self.model_id,
                 config=config,
@@ -255,7 +255,7 @@ class Transcriber:
 
     def set_polish(self, enabled: bool) -> None:
         validate_transcriber_settings(
-            asr_provider=self.asr_provider,
+            provider=self.provider,
             polish=enabled,
         )
         self._backend.set_polish(enabled)
@@ -311,11 +311,11 @@ class StreamSession:
 
 def validate_transcriber_settings(
     *,
-    asr_provider: ASRProvider,
+    provider: ASRProvider,
     polish: bool,
 ) -> None:
-    if asr_provider not in {"parakeet", "groq"}:
-        raise ValueError(f"Unsupported ASR provider: {asr_provider}")
+    if provider not in {"parakeet", "groq"}:
+        raise ValueError(f"Unsupported ASR provider: {provider}")
     if not isinstance(polish, bool):
         raise ValueError(f"Unsupported polish setting: {polish}")
 
