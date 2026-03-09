@@ -74,7 +74,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     sub._choices_actions = [a for a in sub._choices_actions if not a.dest.startswith("_")]
     args = p.parse_args(argv)
     if hasattr(args, "provider"):
-        args.provider = "parakeet" if args.provider == "offline" else "groq"
+        args.provider = "parakeet" if args.provider == "offline" else "whisper"
     return args
 
 

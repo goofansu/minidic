@@ -28,7 +28,7 @@ _MODEL_IDLE_UNLOAD_SECONDS = 30 * 60
 
 
 def _asr_to_provider(asr: str) -> str:
-    return "groq" if asr == "groq" else "parakeet"
+    return "whisper" if asr == "groq" else "parakeet"
 
 
 def _save_wav(chunks: list[np.ndarray]) -> Path:
@@ -69,7 +69,7 @@ def run_daemon(args: argparse.Namespace) -> None:
     model_loaded = False
     last_model_use: float | None = None
     model_lock = threading.Lock()
-    backend_name = "Groq ASR" if transcriber.provider == "groq" else "ASR model"
+    backend_name = "Groq ASR" if transcriber.provider == "whisper" else "ASR model"
     logger.info("%s will load on first transcription (%s).", backend_name, transcriber.model_id)
 
     max_speech_samples = int(get_recording_duration(default=args.duration) * TARGET_RATE)
@@ -168,7 +168,7 @@ def run_daemon(args: argparse.Namespace) -> None:
             last_model_use = None
 
         transcriber = desired
-        backend_name = "Groq ASR" if transcriber.provider == "groq" else "ASR model"
+        backend_name = "Groq ASR" if transcriber.provider == "whisper" else "ASR model"
         logger.info("Switched to %s (%s).", backend_name, transcriber.model_id)
 
     def _transcribe_and_inject(chunks: list[np.ndarray]) -> None:

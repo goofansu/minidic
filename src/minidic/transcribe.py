@@ -20,7 +20,7 @@ from minidic.text_processing import GroqSmoother, RegexSmoother
 
 logger = logging.getLogger(__name__)
 
-ASRProvider = Literal["parakeet", "groq"]
+ASRProvider = Literal["parakeet", "whisper"]
 
 DEFAULT_MODEL = "mlx-community/parakeet-tdt-0.6b-v3"
 GROQ_DEFAULT_MODEL = "whisper-large-v3-turbo"
@@ -232,9 +232,9 @@ class Transcriber:
         )
         config = _PolishConfig(enabled=polish)
         self.provider = provider
-        self.model_id = GROQ_DEFAULT_MODEL if provider == "groq" else DEFAULT_MODEL
+        self.model_id = GROQ_DEFAULT_MODEL if provider == "whisper" else DEFAULT_MODEL
         self._backend: _BaseTranscriber
-        if provider == "groq":
+        if provider == "whisper":
             self._backend = _GroqTranscriber(
                 self.model_id,
                 config=config,
@@ -314,7 +314,7 @@ def validate_transcriber_settings(
     provider: ASRProvider,
     polish: bool,
 ) -> None:
-    if provider not in {"parakeet", "groq"}:
+    if provider not in {"parakeet", "whisper"}:
         raise ValueError(f"Unsupported ASR provider: {provider}")
     if not isinstance(polish, bool):
         raise ValueError(f"Unsupported polish setting: {polish}")
