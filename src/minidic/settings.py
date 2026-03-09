@@ -15,10 +15,10 @@ SETTINGS_FILE = _SETTINGS_DIR / "settings.json"
 
 DEFAULT_DURATION_SECONDS = 60.0
 DEFAULT_PROVIDER = "parakeet"
-DEFAULT_ENHANCEMENT_PROVIDER = "none"
+DEFAULT_POLISH_PROVIDER = "none"
 
 ASRProvider = Literal["parakeet", "groq"]
-EnhancementProvider = Literal["none", "groq"]
+PolishProvider = Literal["none", "groq"]
 
 
 class AsrSettings(TypedDict):
@@ -26,8 +26,8 @@ class AsrSettings(TypedDict):
     model: str
 
 
-class EnhancementSettings(TypedDict):
-    provider: EnhancementProvider
+class PolishSettings(TypedDict):
+    provider: PolishProvider
 
 
 class RecordingSettings(TypedDict):
@@ -36,7 +36,7 @@ class RecordingSettings(TypedDict):
 
 class Settings(TypedDict):
     asr: AsrSettings
-    enhancement: EnhancementSettings
+    polish: PolishSettings
     recording: RecordingSettings
 
 
@@ -45,8 +45,8 @@ DEFAULT_SETTINGS: Settings = {
         "provider": DEFAULT_PROVIDER,
         "model": DEFAULT_MODEL,
     },
-    "enhancement": {
-        "provider": DEFAULT_ENHANCEMENT_PROVIDER,
+    "polish": {
+        "provider": DEFAULT_POLISH_PROVIDER,
     },
     "recording": {
         "duration_seconds": DEFAULT_DURATION_SECONDS,
@@ -76,11 +76,11 @@ def _normalize_asr_provider(value: object, *, default: ASRProvider) -> ASRProvid
     return default
 
 
-def _normalize_enhancement_provider(
-    value: object, *, default: EnhancementProvider
-) -> EnhancementProvider:
+def _normalize_polish_provider(
+    value: object, *, default: PolishProvider
+) -> PolishProvider:
     if value in {"none", "groq"}:
-        return cast(EnhancementProvider, value)
+        return cast(PolishProvider, value)
     return default
 
 
@@ -101,12 +101,12 @@ def _validate_asr_settings(data: object, *, default: AsrSettings | None = None) 
     }
 
 
-def _validate_enhancement_settings(
-    data: object, *, default: EnhancementSettings | None = None
-) -> EnhancementSettings:
-    fallback = DEFAULT_SETTINGS["enhancement"] if default is None else default
+def _validate_polish_settings(
+    data: object, *, default: PolishSettings | None = None
+) -> PolishSettings:
+    fallback = DEFAULT_SETTINGS["polish"] if default is None else default
     payload = data if isinstance(data, Mapping) else {}
-    provider = _normalize_enhancement_provider(
+    provider = _normalize_polish_provider(
         payload.get("provider"), default=fallback["provider"]
     )
     return {
@@ -131,7 +131,7 @@ def validate_settings(data: object) -> Settings:
     payload = data if isinstance(data, Mapping) else {}
     return {
         "asr": _validate_asr_settings(payload.get("asr")),
-        "enhancement": _validate_enhancement_settings(payload.get("enhancement")),
+        "polish": _validate_polish_settings(payload.get("polish")),
         "recording": _validate_recording_settings(payload.get("recording")),
     }
 
@@ -198,15 +198,15 @@ def set_asr_settings(asr: Mapping[str, object]) -> None:
     write_settings(settings)
 
 
-def get_enhancement_settings() -> EnhancementSettings:
-    return read_settings()["enhancement"]
+def get_polish_settings() -> PolishSettings:
+    return read_settings()["polish"]
 
 
-def set_enhancement_settings(enhancement: Mapping[str, object]) -> None:
+def set_polish_settings(polish: Mapping[str, object]) -> None:
     settings = read_settings()
-    settings["enhancement"] = _validate_enhancement_settings(
-        enhancement,
-        default=settings["enhancement"],
+    settings["polish"] = _validate_polish_settings(
+        polish,
+        default=settings["polish"],
     )
     write_settings(settings)
 

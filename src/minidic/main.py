@@ -14,7 +14,7 @@ from minidic.handlers import (
 )
 from minidic.settings import (
     DEFAULT_DURATION_SECONDS,
-    DEFAULT_ENHANCEMENT_PROVIDER,
+    DEFAULT_POLISH_PROVIDER,
     DEFAULT_PROVIDER,
 )
 
@@ -28,10 +28,10 @@ def _add_common_options(parser: argparse.ArgumentParser, *, include_duration: bo
         help="ASR backend provider (default: parakeet)",
     )
     parser.add_argument(
-        "--enhancement",
+        "--polish",
         choices=("none", "groq"),
-        default=DEFAULT_ENHANCEMENT_PROVIDER,
-        help="Transcript enhancement provider (default: none)",
+        default=DEFAULT_POLISH_PROVIDER,
+        help="Transcript polish provider (default: none)",
     )
     if include_duration:
         parser.add_argument(
@@ -58,7 +58,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     sp_menubar.add_argument("-v", "--verbose", action="store_true", help="Enable debug logging")
     sp_menubar.set_defaults(
         provider=DEFAULT_PROVIDER,
-        enhancement=DEFAULT_ENHANCEMENT_PROVIDER,
+        polish=DEFAULT_POLISH_PROVIDER,
         duration=DEFAULT_DURATION_SECONDS,
     )
 

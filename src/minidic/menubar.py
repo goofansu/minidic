@@ -44,15 +44,15 @@ from minidic.runtime.process import (
 from minidic.runtime.state import read_runtime_state
 from minidic.settings import (
     get_asr_settings,
-    get_enhancement_settings,
+    get_polish_settings,
     get_recording_duration,
     set_asr_settings,
-    set_enhancement_settings,
+    set_polish_settings,
     set_recording_duration,
 )
 
 ASR_PROVIDER_TAGS = {0: "parakeet", 1: "groq"}
-ENHANCEMENT_PROVIDER_TAGS = {0: "none", 1: "groq"}
+POLISH_PROVIDER_TAGS = {0: "none", 1: "groq"}
 DURATION_PRESETS = (15.0, 30.0, 60.0, 90.0, 120.0)
 
 
@@ -107,7 +107,7 @@ def _asr_label(provider: str, *, available: bool | None = None) -> str:
     return "Offline (Parakeet)"
 
 
-def _enhancement_label(provider: str, *, available: bool | None = None) -> str:
+def _polish_label(provider: str, *, available: bool | None = None) -> str:
     if provider == "groq":
         if available is False:
             return "Groq — requires GROQ_API_KEY"
@@ -131,8 +131,8 @@ class MiniDicMenuBarApp(NSObject):
         self.toggle_daemon_item = None
         self.asr_menu_item = None
         self.asr_items: dict[str, object] = {}
-        self.enhancement_menu_item = None
-        self.enhancement_items: dict[str, object] = {}
+        self.polish_menu_item = None
+        self.polish_items: dict[str, object] = {}
         self.duration_menu_item = None
         self.duration_items: dict[float, object] = {}
 
@@ -184,30 +184,30 @@ class MiniDicMenuBarApp(NSObject):
         asr_menu.addItem_(asr_groq_item)
         self.asr_items["groq"] = asr_groq_item
 
-        enhancement_menu = NSMenu.alloc().init()
-        self.enhancement_menu_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
-            "Enhancement", None, ""
+        polish_menu = NSMenu.alloc().init()
+        self.polish_menu_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+            "Polish", None, ""
         )
-        self.menu.addItem_(self.enhancement_menu_item)
-        self.menu.setSubmenu_forItem_(enhancement_menu, self.enhancement_menu_item)
+        self.menu.addItem_(self.polish_menu_item)
+        self.menu.setSubmenu_forItem_(polish_menu, self.polish_menu_item)
 
-        enhancement_none_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
-            _enhancement_label("none"), "selectEnhancementProvider:", ""
+        polish_none_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+            _polish_label("none"), "selectPolishProvider:", ""
         )
-        enhancement_none_item.setTarget_(self)
-        enhancement_none_item.setTag_(0)
-        enhancement_menu.addItem_(enhancement_none_item)
-        self.enhancement_items["none"] = enhancement_none_item
+        polish_none_item.setTarget_(self)
+        polish_none_item.setTag_(0)
+        polish_menu.addItem_(polish_none_item)
+        self.polish_items["none"] = polish_none_item
 
-        enhancement_groq_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
-            _enhancement_label("groq", available=_groq_available()),
-            "selectEnhancementProvider:",
+        polish_groq_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+            _polish_label("groq", available=_groq_available()),
+            "selectPolishProvider:",
             "",
         )
-        enhancement_groq_item.setTarget_(self)
-        enhancement_groq_item.setTag_(1)
-        enhancement_menu.addItem_(enhancement_groq_item)
-        self.enhancement_items["groq"] = enhancement_groq_item
+        polish_groq_item.setTarget_(self)
+        polish_groq_item.setTag_(1)
+        polish_menu.addItem_(polish_groq_item)
+        self.polish_items["groq"] = polish_groq_item
 
         duration_menu = NSMenu.alloc().init()
         self.duration_menu_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
@@ -277,11 +277,11 @@ class MiniDicMenuBarApp(NSObject):
             runtime_state = read_runtime_state()
 
         asr_settings = get_asr_settings()
-        enhancement_settings = get_enhancement_settings()
+        polish_settings = get_polish_settings()
         current_duration = get_recording_duration(default=self.args.duration)
 
         self.args.provider = asr_settings["provider"]
-        self.args.enhancement = enhancement_settings["provider"]
+        self.args.polish = polish_settings["provider"]
         self.args.duration = current_duration
 
         groq_available = _groq_available()
@@ -294,14 +294,14 @@ class MiniDicMenuBarApp(NSObject):
                 item.setTitle_(_asr_label("groq", available=groq_available))
                 item.setEnabled_(groq_available)
 
-        if self.enhancement_menu_item is not None:
-            self.enhancement_menu_item.setTitle_(
-                f"Enhancement: {_enhancement_label(enhancement_settings['provider'])}"
+        if self.polish_menu_item is not None:
+            self.polish_menu_item.setTitle_(
+                f"Polish: {_polish_label(polish_settings['provider'])}"
             )
-        for provider, item in self.enhancement_items.items():
-            item.setState_(1 if provider == enhancement_settings["provider"] else 0)
+        for provider, item in self.polish_items.items():
+            item.setState_(1 if provider == polish_settings["provider"] else 0)
             if provider == "groq":
-                item.setTitle_(_enhancement_label("groq", available=groq_available))
+                item.setTitle_(_polish_label("groq", available=groq_available))
                 item.setEnabled_(groq_available)
 
         if self.duration_menu_item is not None:
@@ -487,13 +487,13 @@ class MiniDicMenuBarApp(NSObject):
         set_asr_settings({"provider": provider})
         self.refreshStatus_(None)
 
-    def selectEnhancementProvider_(self, sender: object) -> None:
-        provider = ENHANCEMENT_PROVIDER_TAGS.get(int(sender.tag()))
+    def selectPolishProvider_(self, sender: object) -> None:
+        provider = POLISH_PROVIDER_TAGS.get(int(sender.tag()))
         if provider is None:
             return
         if provider == "groq" and not _groq_available():
             return
-        set_enhancement_settings({"provider": provider})
+        set_polish_settings({"provider": provider})
         self.refreshStatus_(None)
 
     def selectDuration_(self, sender: object) -> None:

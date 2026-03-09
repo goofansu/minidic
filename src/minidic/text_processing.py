@@ -9,7 +9,7 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-GROQ_ENHANCEMENT_MODEL = "llama-3.1-8b-instant"
+GROQ_POLISH_MODEL = "llama-3.1-8b-instant"
 
 # Filler words / hesitation sounds to strip from transcription output.
 # Matched case-insensitively as whole words.
@@ -70,7 +70,7 @@ class GroqSmoother:
             return
 
         self._client = _Groq(api_key=self._api_key)
-        logger.info("Groq transcript smoothing enabled (%s).", GROQ_ENHANCEMENT_MODEL)
+        logger.info("Groq transcript smoothing enabled (%s).", GROQ_POLISH_MODEL)
 
     @property
     def enabled(self) -> bool:
@@ -84,7 +84,7 @@ class GroqSmoother:
 
         try:
             response = self._client.chat.completions.create(
-                model=GROQ_ENHANCEMENT_MODEL,
+                model=GROQ_POLISH_MODEL,
                 messages=[
                     {
                         "role": "system",

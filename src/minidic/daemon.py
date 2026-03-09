@@ -18,7 +18,7 @@ from minidic.audio import AudioStream, TARGET_RATE, int16_to_float32
 from minidic.inject import inject_text
 from minidic.runtime.process import DAEMON_PID_FILE
 from minidic.runtime.state import clear_runtime_state, write_runtime_state
-from minidic.settings import get_asr_settings, get_enhancement_settings, get_recording_duration
+from minidic.settings import get_asr_settings, get_polish_settings, get_recording_duration
 from minidic.transcribe import Transcriber
 
 logger = logging.getLogger(__name__)
@@ -59,12 +59,12 @@ def run_daemon(args: argparse.Namespace) -> None:
     signal.signal(signal.SIGTERM, _on_sigterm)
 
     asr_settings = get_asr_settings()
-    enhancement_settings = get_enhancement_settings()
+    polish_settings = get_polish_settings()
 
     transcriber = Transcriber(
         asr_provider=asr_settings["provider"],
         asr_model=asr_settings["model"],
-        enhancement_provider=enhancement_settings["provider"],
+        polish_provider=polish_settings["provider"],
     )
     model_loaded = False
     last_model_use: float | None = None
@@ -155,7 +155,7 @@ def run_daemon(args: argparse.Namespace) -> None:
         desired = Transcriber(
             asr_provider=asr_now["provider"],
             asr_model=asr_now["model"],
-            enhancement_provider="none",
+            polish_provider="none",
         )
         if _transcriber_signature(desired) == _transcriber_signature(transcriber):
             return
@@ -190,8 +190,8 @@ def run_daemon(args: argparse.Namespace) -> None:
                     model_loaded = True
                     logger.info("%s ready.", backend_name)
 
-                enhancement_now = get_enhancement_settings()
-                transcriber.set_enhancement(enhancement_now["provider"])
+                polish_now = get_polish_settings()
+                transcriber.set_polish(polish_now["provider"])
 
                 text = transcriber.transcribe(audio_f32)
                 last_model_use = time.monotonic()
