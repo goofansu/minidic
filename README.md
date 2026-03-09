@@ -42,7 +42,7 @@ minidic console --polish
 
 The first time you use the default offline backend, `minidic console` will download `mlx-community/parakeet-tdt-0.6b-v3`.
 
-Use Parakeet for fully local transcription or Groq for cloud-based transcription. Polish is optional and uses a small Groq LLM to improve punctuation and phrasing after transcription. `--polish` enables the built-in Groq polish backend. You can combine `--asr groq` with `--polish`.
+Use the offline backend (Parakeet) for local transcription or Groq for cloud-based transcription. Polish is optional and uses a Groq LLM to improve punctuation and phrasing after transcription. `--polish` enables the built-in Groq polish backend. You can combine `--asr groq` with `--polish`.
 
 ### Transcribe
 
@@ -92,7 +92,7 @@ Groq requires `GROQ_API_KEY`. If the key is missing, `minidic` raises an error; 
 
 1. Capture mic audio with `sounddevice`
 2. Resample to 16 kHz with `soxr` when needed
-3. Transcribe with Parakeet or Groq depending on `asr.provider`
+3. Transcribe with Parakeet or Groq depending on `asr`
 4. Apply local regex cleanup by default to remove filler words like `um` and `uh`
 5. Optionally run Groq polish when enabled
 6. Inject text into the active app on macOS in daemon mode
@@ -107,18 +107,17 @@ The daemon mode is hotkey-driven and lazily loads and unloads the ASR model to r
 └── recordings/            # WAV recordings created during dictation/transcription
 
 ~/.local/state/minidic/
+├── daemon.error           # last daemon error message (transient)
 ├── daemon.log             # daemon logs
 ├── daemon.pid             # daemon process ID
-├── daemon.state           # current daemon state: idle, recording, transcribing
+├── daemon.state           # current daemon state: idle, recording, transcribing, error
 ├── menubar.log            # menu bar mode logs
 └── menubar.pid            # menu bar process ID
 ```
 
 ### Configuration
 
-`minidic` stores persistent configuration in `~/.minidic/settings.json`.
-
-`minidic` stores a flat settings object with these keys:
+`minidic` stores persistent configuration in `~/.minidic/settings.json` as a flat JSON object with these keys:
 
 - `asr`: `"offline"` or `"groq"`
 - `polish`: `true` or `false`
