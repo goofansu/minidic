@@ -46,6 +46,7 @@ from minidic.settings import (
     get_asr_provider,
     get_polish_provider,
     get_recording_duration,
+    read_settings,
     set_asr_provider,
     set_polish_provider,
     set_recording_duration,
@@ -279,9 +280,10 @@ class MiniDicMenuBarApp(NSObject):
                 error_msg = read_runtime_error() or "unknown error"
                 button.setToolTip_(f"minidic: Error — {error_msg}")
 
-        asr_provider = get_asr_provider()
-        polish_provider = get_polish_provider()
-        current_duration = get_recording_duration(default=self.args.duration)
+        settings = read_settings()
+        asr_provider = settings["asr_provider"]
+        polish_provider = settings["polish_provider"]
+        current_duration = settings["duration_seconds"]
 
         self.args.provider = asr_provider
         self.args.polish = polish_provider

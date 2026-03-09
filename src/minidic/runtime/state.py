@@ -28,12 +28,17 @@ def read_runtime_error() -> str:
 
 
 def write_runtime_state(state: str) -> None:
+    _STATE_DIR.mkdir(parents=True, exist_ok=True)
     DAEMON_STATE_FILE.write_text(state)
 
 
 def write_runtime_error(message: str) -> None:
     _STATE_DIR.mkdir(parents=True, exist_ok=True)
     DAEMON_ERROR_FILE.write_text(message)
+
+
+def clear_runtime_error() -> None:
+    DAEMON_ERROR_FILE.unlink(missing_ok=True)
 
 
 def clear_runtime_state() -> None:

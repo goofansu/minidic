@@ -17,7 +17,7 @@ import numpy as np
 from minidic.audio import AudioStream, TARGET_RATE, int16_to_float32
 from minidic.inject import inject_text
 from minidic.runtime.process import DAEMON_PID_FILE
-from minidic.runtime.state import clear_runtime_state, write_runtime_error, write_runtime_state
+from minidic.runtime.state import clear_runtime_error, clear_runtime_state, write_runtime_error, write_runtime_state
 from minidic.settings import get_asr_provider, get_polish_provider, get_recording_duration
 from minidic.transcribe import Transcriber
 
@@ -209,6 +209,10 @@ def run_daemon(args: argparse.Namespace) -> None:
                     _write_error_state(str(caught_exc))
                 else:
                     _write_state("idle")
+                    try:
+                        clear_runtime_error()
+                    except OSError:
+                        logger.exception("Failed to clear error file")
 
     def _model_reaper() -> None:
         nonlocal model_loaded, last_model_use

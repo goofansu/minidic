@@ -101,11 +101,11 @@ class GroqSmoother:
                 max_tokens=1024,
                 temperature=0,
             )
+            smoothed = (response.choices[0].message.content or "").strip()
         except Exception:
             logger.exception("Groq smoothing failed; using raw transcript.")
             return text
 
-        smoothed = (response.choices[0].message.content or "").strip()
         if smoothed:
             return smoothed
 
