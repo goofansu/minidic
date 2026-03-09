@@ -89,11 +89,10 @@ class GroqSmoother:
                     {
                         "role": "system",
                         "content": (
-                            "You clean up raw speech-to-text output for dictation. "
-                            "Preserve original meaning and language. "
-                            "Fix punctuation/casing and smooth awkward phrasing. "
-                            "Do not add new facts. "
-                            "Return only the final rewritten text."
+                            "You are a transcript formatter. Your only job is to fix punctuation and casing. "
+                            "Never translate, paraphrase, drop, or add any words. "
+                            "If the input contains multiple languages, keep every language segment intact and untouched. "
+                            "Return only the lightly formatted transcript, nothing else."
                         ),
                     },
                     {"role": "user", "content": text},
