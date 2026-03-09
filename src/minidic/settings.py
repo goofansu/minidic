@@ -6,9 +6,7 @@ import json
 import os
 import tempfile
 from pathlib import Path
-from typing import Any, Literal, Mapping, TypedDict, cast
-
-from minidic.transcribe import DEFAULT_MODEL, GROQ_DEFAULT_MODEL
+from typing import Literal, Mapping, TypedDict, cast
 
 _SETTINGS_DIR = Path.home() / ".minidic"
 SETTINGS_FILE = _SETTINGS_DIR / "settings.json"
@@ -21,42 +19,28 @@ ASRProvider = Literal["parakeet", "groq"]
 PolishProvider = Literal["none", "groq"]
 
 
-class AsrSettings(TypedDict):
-    provider: ASRProvider
-    model: str
-
-
-class PolishSettings(TypedDict):
-    provider: PolishProvider
-
-
-class RecordingSettings(TypedDict):
+class Settings(TypedDict):
+    asr_provider: ASRProvider
+    polish_provider: PolishProvider
     duration_seconds: float
 
 
-class Settings(TypedDict):
-    asr: AsrSettings
-    polish: PolishSettings
-    recording: RecordingSettings
-
-
 DEFAULT_SETTINGS: Settings = {
-    "asr": {
-        "provider": DEFAULT_PROVIDER,
-        "model": DEFAULT_MODEL,
-    },
-    "polish": {
-        "provider": DEFAULT_POLISH_PROVIDER,
-    },
-    "recording": {
-        "duration_seconds": DEFAULT_DURATION_SECONDS,
-    },
+    "asr_provider": DEFAULT_PROVIDER,
+    "polish_provider": DEFAULT_POLISH_PROVIDER,
+    "duration_seconds": DEFAULT_DURATION_SECONDS,
 }
 
 
-def _normalize_str(value: object, *, default: str) -> str:
-    if isinstance(value, str):
-        return value.strip()
+def _normalize_asr_provider(value: object, *, default: ASRProvider) -> ASRProvider:
+    if value in {"parakeet", "groq"}:
+        return cast(ASRProvider, value)
+    return default
+
+
+def _normalize_polish_provider(value: object, *, default: PolishProvider) -> PolishProvider:
+    if value in {"none", "groq"}:
+        return cast(PolishProvider, value)
     return default
 
 
@@ -70,84 +54,27 @@ def _normalize_duration_seconds(value: object, *, default: float) -> float:
     return default
 
 
-def _normalize_asr_provider(value: object, *, default: ASRProvider) -> ASRProvider:
-    if value in {"parakeet", "groq"}:
-        return cast(ASRProvider, value)
-    return default
-
-
-def _normalize_polish_provider(
-    value: object, *, default: PolishProvider
-) -> PolishProvider:
-    if value in {"none", "groq"}:
-        return cast(PolishProvider, value)
-    return default
-
-
-def _default_asr_model(provider: ASRProvider) -> str:
-    if provider == "groq":
-        return GROQ_DEFAULT_MODEL
-    return DEFAULT_MODEL
-
-
-def _validate_asr_settings(data: object, *, default: AsrSettings | None = None) -> AsrSettings:
-    fallback = DEFAULT_SETTINGS["asr"] if default is None else default
-    payload = data if isinstance(data, Mapping) else {}
-    provider = _normalize_asr_provider(payload.get("provider"), default=fallback["provider"])
-    default_model = fallback["model"] if provider == fallback["provider"] else _default_asr_model(provider)
-    return {
-        "provider": provider,
-        "model": _normalize_str(payload.get("model"), default=default_model),
-    }
-
-
-def _validate_polish_settings(
-    data: object, *, default: PolishSettings | None = None
-) -> PolishSettings:
-    fallback = DEFAULT_SETTINGS["polish"] if default is None else default
-    payload = data if isinstance(data, Mapping) else {}
-    provider = _normalize_polish_provider(
-        payload.get("provider"), default=fallback["provider"]
-    )
-    return {
-        "provider": provider,
-    }
-
-
-def _validate_recording_settings(
-    data: object, *, default: RecordingSettings | None = None
-) -> RecordingSettings:
-    fallback = DEFAULT_SETTINGS["recording"] if default is None else default
+def validate_settings(data: object) -> Settings:
     payload = data if isinstance(data, Mapping) else {}
     return {
+        "asr_provider": _normalize_asr_provider(
+            payload.get("asr_provider"), default=DEFAULT_SETTINGS["asr_provider"]
+        ),
+        "polish_provider": _normalize_polish_provider(
+            payload.get("polish_provider"), default=DEFAULT_SETTINGS["polish_provider"]
+        ),
         "duration_seconds": _normalize_duration_seconds(
-            payload.get("duration_seconds"),
-            default=fallback["duration_seconds"],
+            payload.get("duration_seconds"), default=DEFAULT_SETTINGS["duration_seconds"]
         ),
     }
 
 
-def validate_settings(data: object) -> Settings:
-    payload = data if isinstance(data, Mapping) else {}
-    return {
-        "asr": _validate_asr_settings(payload.get("asr")),
-        "polish": _validate_polish_settings(payload.get("polish")),
-        "recording": _validate_recording_settings(payload.get("recording")),
-    }
-
-
-def _load_settings_file(path: Path) -> dict[str, Any] | None:
+def _load_settings_file(path: Path) -> dict | None:
     try:
         data = json.loads(path.read_text())
-    except OSError:
+    except (OSError, json.JSONDecodeError):
         return None
-    except json.JSONDecodeError:
-        return None
-
-    if not isinstance(data, dict):
-        return None
-
-    return data
+    return data if isinstance(data, dict) else None
 
 
 def read_settings() -> Settings:
@@ -188,51 +115,36 @@ def write_settings(settings: Mapping[str, object]) -> None:
                 pass
 
 
-def get_asr_settings() -> AsrSettings:
-    return read_settings()["asr"]
+def get_asr_provider() -> ASRProvider:
+    return read_settings()["asr_provider"]
 
 
-def set_asr_settings(asr: Mapping[str, object]) -> None:
+def set_asr_provider(provider: ASRProvider) -> None:
     settings = read_settings()
-    settings["asr"] = _validate_asr_settings(asr, default=settings["asr"])
+    settings["asr_provider"] = _normalize_asr_provider(provider, default=settings["asr_provider"])
     write_settings(settings)
 
 
-def get_polish_settings() -> PolishSettings:
-    return read_settings()["polish"]
+def get_polish_provider() -> PolishProvider:
+    return read_settings()["polish_provider"]
 
 
-def set_polish_settings(polish: Mapping[str, object]) -> None:
+def set_polish_provider(provider: PolishProvider) -> None:
     settings = read_settings()
-    settings["polish"] = _validate_polish_settings(
-        polish,
-        default=settings["polish"],
+    settings["polish_provider"] = _normalize_polish_provider(
+        provider, default=settings["polish_provider"]
     )
-    write_settings(settings)
-
-
-def get_recording_settings() -> RecordingSettings:
-    return read_settings()["recording"]
-
-
-def set_recording_settings(recording: Mapping[str, object]) -> None:
-    settings = read_settings()
-    settings["recording"] = _validate_recording_settings(recording, default=settings["recording"])
     write_settings(settings)
 
 
 def get_recording_duration(*, default: float = DEFAULT_DURATION_SECONDS) -> float:
     settings = read_settings()
-    return _normalize_duration_seconds(
-        settings["recording"].get("duration_seconds"),
-        default=default,
-    )
+    return _normalize_duration_seconds(settings["duration_seconds"], default=default)
 
 
 def set_recording_duration(duration: float) -> None:
     settings = read_settings()
-    settings["recording"]["duration_seconds"] = _normalize_duration_seconds(
-        duration,
-        default=DEFAULT_DURATION_SECONDS,
+    settings["duration_seconds"] = _normalize_duration_seconds(
+        duration, default=DEFAULT_DURATION_SECONDS
     )
     write_settings(settings)

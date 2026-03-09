@@ -18,7 +18,7 @@ from minidic.audio import AudioStream, TARGET_RATE, int16_to_float32
 from minidic.inject import inject_text
 from minidic.runtime.process import DAEMON_PID_FILE
 from minidic.runtime.state import clear_runtime_state, write_runtime_state
-from minidic.settings import get_asr_settings, get_polish_settings, get_recording_duration
+from minidic.settings import get_asr_provider, get_polish_provider, get_recording_duration
 from minidic.transcribe import Transcriber
 
 logger = logging.getLogger(__name__)
@@ -58,13 +58,9 @@ def run_daemon(args: argparse.Namespace) -> None:
 
     signal.signal(signal.SIGTERM, _on_sigterm)
 
-    asr_settings = get_asr_settings()
-    polish_settings = get_polish_settings()
-
     transcriber = Transcriber(
-        asr_provider=asr_settings["provider"],
-        asr_model=asr_settings["model"],
-        polish_provider=polish_settings["provider"],
+        asr_provider=get_asr_provider(),
+        polish_provider=get_polish_provider(),
     )
     model_loaded = False
     last_model_use: float | None = None
@@ -151,12 +147,7 @@ def run_daemon(args: argparse.Namespace) -> None:
     def _ensure_transcriber_current() -> None:
         nonlocal transcriber, model_loaded, last_model_use, backend_name
 
-        asr_now = get_asr_settings()
-        desired = Transcriber(
-            asr_provider=asr_now["provider"],
-            asr_model=asr_now["model"],
-            polish_provider="none",
-        )
+        desired = Transcriber(asr_provider=get_asr_provider(), polish_provider="none")
         if _transcriber_signature(desired) == _transcriber_signature(transcriber):
             return
 
@@ -190,8 +181,7 @@ def run_daemon(args: argparse.Namespace) -> None:
                     model_loaded = True
                     logger.info("%s ready.", backend_name)
 
-                polish_now = get_polish_settings()
-                transcriber.set_polish(polish_now["provider"])
+                transcriber.set_polish(get_polish_provider())
 
                 text = transcriber.transcribe(audio_f32)
                 last_model_use = time.monotonic()

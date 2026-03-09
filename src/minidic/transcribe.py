@@ -223,7 +223,6 @@ class Transcriber:
     def __init__(
         self,
         asr_provider: ASRProvider = "parakeet",
-        asr_model: str = DEFAULT_MODEL,
         *,
         strip_fillers: bool = True,
         polish_provider: PolishProvider = "none",
@@ -234,7 +233,7 @@ class Transcriber:
         )
         config = _PolishConfig(provider=polish_provider)
         self.asr_provider = asr_provider
-        self.model_id = resolve_model_id(asr_provider, asr_model)
+        self.model_id = GROQ_DEFAULT_MODEL if asr_provider == "groq" else DEFAULT_MODEL
         self._backend: _BaseTranscriber
         if asr_provider == "groq":
             self._backend = _GroqTranscriber(
@@ -320,15 +319,6 @@ def validate_transcriber_settings(
         raise ValueError(f"Unsupported ASR provider: {asr_provider}")
     if polish_provider not in {"none", "groq"}:
         raise ValueError(f"Unsupported polish provider: {polish_provider}")
-
-
-def resolve_model_id(asr_provider: ASRProvider, model_id: str) -> str:
-    normalized_model_id = model_id.strip()
-    if normalized_model_id and normalized_model_id != DEFAULT_MODEL:
-        return normalized_model_id
-    if asr_provider == "groq":
-        return GROQ_DEFAULT_MODEL
-    return DEFAULT_MODEL
 
 
 def _wav_upload_tuple(audio_f32: np.ndarray) -> tuple[str, bytes]:
