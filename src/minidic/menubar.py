@@ -41,7 +41,7 @@ from minidic.runtime.process import (
     spawn_detached,
     stop_pid,
 )
-from minidic.runtime.state import read_runtime_state
+from minidic.runtime.state import read_runtime_error, read_runtime_state
 from minidic.settings import (
     get_asr_provider,
     get_polish_provider,
@@ -275,6 +275,9 @@ class MiniDicMenuBarApp(NSObject):
         else:
             self.toggle_daemon_item.setTitle_("Stop daemon")
             runtime_state = read_runtime_state()
+            if runtime_state == "error" and button is not None:
+                error_msg = read_runtime_error() or "unknown error"
+                button.setToolTip_(f"minidic: Error — {error_msg}")
 
         asr_provider = get_asr_provider()
         polish_provider = get_polish_provider()
@@ -314,7 +317,7 @@ class MiniDicMenuBarApp(NSObject):
 
         if runtime_state == "recording" and self.last_runtime_state != "recording":
             self.showDictationOverlay_("Listening")
-        elif self.last_runtime_state == "recording" and runtime_state == "idle":
+        elif self.last_runtime_state == "recording" and runtime_state in ("idle", "error"):
             self.hideOverlay_(None)
 
         self.last_runtime_state = runtime_state

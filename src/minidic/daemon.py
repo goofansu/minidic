@@ -17,7 +17,7 @@ import numpy as np
 from minidic.audio import AudioStream, TARGET_RATE, int16_to_float32
 from minidic.inject import inject_text
 from minidic.runtime.process import DAEMON_PID_FILE
-from minidic.runtime.state import clear_runtime_state, write_runtime_state
+from minidic.runtime.state import clear_runtime_state, write_runtime_error, write_runtime_state
 from minidic.settings import get_asr_provider, get_polish_provider, get_recording_duration
 from minidic.transcribe import Transcriber
 
@@ -81,6 +81,13 @@ def run_daemon(args: argparse.Namespace) -> None:
             write_runtime_state(state)
         except OSError:
             logger.exception("Failed to write state file")
+
+    def _write_error_state(message: str) -> None:
+        try:
+            write_runtime_error(message)
+            write_runtime_state("error")
+        except OSError:
+            logger.exception("Failed to write error state")
 
     finish_event = threading.Event()
 
@@ -162,6 +169,7 @@ def run_daemon(args: argparse.Namespace) -> None:
 
     def _transcribe_and_inject(chunks: list[np.ndarray]) -> None:
         nonlocal mode, model_loaded, last_model_use
+        caught_exc: BaseException | None = None
         try:
             if not chunks:
                 return
@@ -191,12 +199,16 @@ def run_daemon(args: argparse.Namespace) -> None:
                 logger.info("Injected: %s", text)
             else:
                 logger.info("No speech detected.")
-        except Exception:
+        except Exception as exc:
             logger.exception("Transcription/injection error")
+            caught_exc = exc
         finally:
             with lock:
                 mode = "idle"
-                _write_state("idle")
+                if caught_exc is not None:
+                    _write_error_state(str(caught_exc))
+                else:
+                    _write_state("idle")
 
     def _model_reaper() -> None:
         nonlocal model_loaded, last_model_use
@@ -227,8 +239,9 @@ def run_daemon(args: argparse.Namespace) -> None:
                 try:
                     stream = AudioStream()
                     stream.start()
-                except Exception:
+                except Exception as exc:
                     logger.exception("Failed to open microphone")
+                    _write_error_state(str(exc))
                     return
                 audio = stream
                 mode = "recording"
