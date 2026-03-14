@@ -18,7 +18,12 @@ from minidic.audio import AudioStream, TARGET_RATE, int16_to_float32
 from minidic.inject import inject_text
 from minidic.runtime.process import DAEMON_PID_FILE
 from minidic.runtime.state import clear_runtime_error, clear_runtime_state, write_runtime_error, write_runtime_state
-from minidic.settings import get_polish, get_provider, get_recording_duration
+from minidic.settings import (
+    get_groq_whisper_prompt,
+    get_polish,
+    get_provider,
+    get_recording_duration,
+)
 from minidic.transcribe import Transcriber
 
 logger = logging.getLogger(__name__)
@@ -58,9 +63,12 @@ def run_daemon(args: argparse.Namespace) -> None:
 
     signal.signal(signal.SIGTERM, _on_sigterm)
 
+    whisper_prompt = get_groq_whisper_prompt()
+    logger.debug("Loaded Groq Whisper prompt at daemon start: %r", whisper_prompt)
     transcriber = Transcriber(
         provider=get_provider(),
         polish=get_polish(),
+        prompt=whisper_prompt,
     )
     model_loaded = False
     last_model_use: float | None = None
@@ -154,7 +162,7 @@ def run_daemon(args: argparse.Namespace) -> None:
     def _ensure_transcriber_current() -> None:
         nonlocal transcriber, model_loaded, last_model_use, backend_name
 
-        desired = Transcriber(provider=get_provider(), polish=False)
+        desired = Transcriber(provider=get_provider(), polish=False, prompt=whisper_prompt)
         if _transcriber_signature(desired) == _transcriber_signature(transcriber):
             return
 

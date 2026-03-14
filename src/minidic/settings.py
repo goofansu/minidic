@@ -14,18 +14,21 @@ SETTINGS_FILE = _SETTINGS_DIR / "settings.json"
 DEFAULT_DURATION_SECONDS = 60.0
 DEFAULT_ONLINE = False
 DEFAULT_POLISH = False
+DEFAULT_GROQ_WHISPER_PROMPT = ""
 
 
 class Settings(TypedDict):
     online: bool
     polish: bool
     duration_seconds: float
+    groq_whisper_prompt: str
 
 
 DEFAULT_SETTINGS: Settings = {
     "online": DEFAULT_ONLINE,
     "polish": DEFAULT_POLISH,
     "duration_seconds": DEFAULT_DURATION_SECONDS,
+    "groq_whisper_prompt": DEFAULT_GROQ_WHISPER_PROMPT,
 }
 
 
@@ -45,6 +48,12 @@ def _normalize_duration_seconds(value: object, *, default: float) -> float:
     return default
 
 
+def _normalize_text(value: object, *, default: str) -> str:
+    if isinstance(value, str):
+        return value
+    return default
+
+
 def validate_settings(data: object) -> Settings:
     payload = data if isinstance(data, Mapping) else {}
     return {
@@ -52,6 +61,10 @@ def validate_settings(data: object) -> Settings:
         "polish": _normalize_bool(payload.get("polish"), default=DEFAULT_SETTINGS["polish"]),
         "duration_seconds": _normalize_duration_seconds(
             payload.get("duration_seconds"), default=DEFAULT_SETTINGS["duration_seconds"]
+        ),
+        "groq_whisper_prompt": _normalize_text(
+            payload.get("groq_whisper_prompt"),
+            default=DEFAULT_SETTINGS["groq_whisper_prompt"],
         ),
     }
 
@@ -138,5 +151,17 @@ def set_recording_duration(duration: float) -> None:
     settings = read_settings()
     settings["duration_seconds"] = _normalize_duration_seconds(
         duration, default=DEFAULT_DURATION_SECONDS
+    )
+    write_settings(settings)
+
+
+def get_groq_whisper_prompt() -> str:
+    return read_settings()["groq_whisper_prompt"]
+
+
+def set_groq_whisper_prompt(prompt: str) -> None:
+    settings = read_settings()
+    settings["groq_whisper_prompt"] = _normalize_text(
+        prompt, default=DEFAULT_GROQ_WHISPER_PROMPT
     )
     write_settings(settings)

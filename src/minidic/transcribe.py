@@ -162,9 +162,11 @@ class _GroqTranscriber(_BaseTranscriber):
         *,
         config: _PolishConfig,
         strip_fillers: bool = True,
+        prompt: str = "",
     ) -> None:
         super().__init__(config=config, strip_fillers=strip_fillers)
         self.model_id = model_id
+        self.prompt = prompt
         self._client: Any | None = None
 
     def load(self) -> None:
@@ -195,8 +197,9 @@ class _GroqTranscriber(_BaseTranscriber):
             "model": self.model_id,
             "temperature": 0,
             "response_format": "verbose_json",
-            "prompt": "Hello. 简体中文。",
         }
+        if self.prompt:
+            request["prompt"] = self.prompt
 
         try:
             response = self._client.audio.transcriptions.create(**request)
@@ -226,10 +229,12 @@ class Transcriber:
         *,
         strip_fillers: bool = True,
         polish: bool = False,
+        prompt: str = "",
     ) -> None:
         validate_transcriber_settings(
             provider=provider,
             polish=polish,
+            prompt=prompt,
         )
         config = _PolishConfig(enabled=polish)
         self.provider = provider
@@ -240,6 +245,7 @@ class Transcriber:
                 self.model_id,
                 config=config,
                 strip_fillers=strip_fillers,
+                prompt=prompt,
             )
         else:
             self._backend = _LocalTranscriber(
@@ -314,11 +320,14 @@ def validate_transcriber_settings(
     *,
     provider: ASRProvider,
     polish: bool,
+    prompt: str = "",
 ) -> None:
     if provider not in {"parakeet", "whisper"}:
         raise ValueError(f"Unsupported ASR provider: {provider}")
     if not isinstance(polish, bool):
         raise ValueError(f"Unsupported polish setting: {polish}")
+    if not isinstance(prompt, str):
+        raise ValueError(f"Unsupported Groq Whisper prompt: {prompt}")
 
 
 def _wav_upload_tuple(audio_f32: np.ndarray) -> tuple[str, bytes]:

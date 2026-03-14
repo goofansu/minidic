@@ -124,12 +124,14 @@ The daemon mode is hotkey-driven and lazily loads and unloads the ASR model to r
 - `online`: `true` or `false`
 - `polish`: `true` or `false`
 - `duration_seconds`
+- `groq_whisper_prompt`: optional prompt string passed to Groq Whisper when the daemon starts
 
 Default `settings.json`:
 
 ```json
 {
   "duration_seconds": 60.0,
+  "groq_whisper_prompt": "",
   "online": false,
   "polish": false
 }
