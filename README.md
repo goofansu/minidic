@@ -58,7 +58,7 @@ minidic transcribe --online --polish path/to/file.wav
 
 ### Menu bar
 
-Run `minidic` in menu bar mode with a background daemon and a global `F5` hotkey to toggle dictation.
+Run `minidic` in menu bar mode with a background daemon and a global hotkey to start and stop dictation.
 
 ```bash
 minidic menubar
@@ -76,7 +76,7 @@ The menu bar UI lets you change settings without restarting the daemon; changes 
 3. Optionally choose **Polish**: `No` or `Yes`.
 4. Optionally choose a max recording length from **Duration**.
 5. Click **Start daemon**.
-6. Press `F5` to toggle start/stop dictation.
+6. Use your configured hotkey to dictate (default: `F5` in `toggle` mode).
 
 Groq features require `GROQ_API_KEY`. If the key is missing, `minidic` raises an error; in daemon mode, the error is logged to `daemon.log`.
 
@@ -105,7 +105,7 @@ The daemon mode is hotkey-driven and lazily loads and unloads the ASR model to r
 
 ```text
 ~/.minidic/
-├── settings.json          # persisted settings for online mode, polish, and recording duration
+├── settings.json          # persisted settings (backend, polish, duration, hotkey)
 └── recordings/            # WAV recordings created during dictation/transcription
 
 ~/.local/state/minidic/
@@ -123,8 +123,19 @@ The daemon mode is hotkey-driven and lazily loads and unloads the ASR model to r
 
 - `online`: `true` or `false`
 - `polish`: `true` or `false`
-- `duration_seconds`
+- `duration_seconds`: maximum recording length in seconds
 - `groq_whisper_prompt`: optional prompt string passed to Groq Whisper when the daemon starts
+- `hotkey`: the global hotkey used to trigger dictation (default: `"F5"`)
+- `hotkey_mode`: how the hotkey controls recording — `"toggle"` or `"push_to_talk"` (default: `"toggle"`)
+
+#### Hotkey
+
+Supported hotkey values: `F1`–`F12`, `RIGHT_COMMAND`, `RIGHT_OPTION`, `RIGHT_SHIFT`, `RIGHT_CONTROL`.
+
+#### Hotkey mode
+
+- **`toggle`** — press once to start recording, press again to stop and transcribe.
+- **`push_to_talk`** — hold the key while speaking; release to stop and transcribe. Recordings shorter than 0.5 seconds are silently discarded to avoid accidental triggers.
 
 Default `settings.json`:
 
@@ -132,6 +143,8 @@ Default `settings.json`:
 {
   "duration_seconds": 60.0,
   "groq_whisper_prompt": "",
+  "hotkey": "F5",
+  "hotkey_mode": "toggle",
   "online": false,
   "polish": false
 }
