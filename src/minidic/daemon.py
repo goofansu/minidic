@@ -38,6 +38,8 @@ logger = logging.getLogger(__name__)
 
 _MINIDIC_DIR = Path.home() / ".minidic"
 _MODEL_IDLE_UNLOAD_SECONDS = 30 * 60
+# Recordings shorter than this are silently discarded (accidental taps).
+_MIN_RECORDING_SECONDS = 0.5
 
 
 def _hotkey_listener_kwargs(hotkey_mode: str) -> dict[str, float | bool]:
@@ -224,15 +226,27 @@ def run_daemon(args: argparse.Namespace) -> None:
         time.sleep(0.05)
 
         with lock:
-            mode = "transcribing"
-            _write_state("transcribing")
             chunks = list(recording_chunks)
             recording_chunks.clear()
             sample_count = 0
+            captured_samples = sum(len(c) for c in chunks)
             if audio is not None:
                 audio.stop()
                 audio = None
             logger.info("Recording stopped (mic closed).")
+
+            if captured_samples / TARGET_RATE < _MIN_RECORDING_SECONDS:
+                mode = "idle"
+                _write_state("idle")
+                logger.info(
+                    "Recording too short (%.2fs < %.2fs) — discarding.",
+                    captured_samples / TARGET_RATE,
+                    _MIN_RECORDING_SECONDS,
+                )
+                return
+
+            mode = "transcribing"
+            _write_state("transcribing")
 
         threading.Thread(
             target=_transcribe_and_inject,
