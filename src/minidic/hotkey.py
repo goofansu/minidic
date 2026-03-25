@@ -15,6 +15,7 @@ import time
 from typing import Callable
 
 from Quartz import (
+    CGEventGetFlags,
     CGEventGetIntegerValueField,
     CGEventTapCreate,
     CGEventTapEnable,
@@ -23,7 +24,19 @@ from Quartz import (
     CFRunLoopGetCurrent,
     CFRunLoopRun,
     CFRunLoopStop,
+    kCGEventFlagsChanged,
     kCGEventKeyDown,
+    kCGEventKeyUp,
+    kCGEventLeftMouseDown,
+    kCGEventLeftMouseDragged,
+    kCGEventLeftMouseUp,
+    kCGEventOtherMouseDown,
+    kCGEventOtherMouseDragged,
+    kCGEventOtherMouseUp,
+    kCGEventRightMouseDown,
+    kCGEventRightMouseDragged,
+    kCGEventRightMouseUp,
+    kCGEventScrollWheel,
     kCGHeadInsertEventTap,
     kCGKeyboardEventAutorepeat,
     kCGKeyboardEventKeycode,
@@ -33,7 +46,6 @@ from Quartz import (
 
 logger = logging.getLogger(__name__)
 
-# Function-key names supported by this listener.
 HOTKEY_TO_KEYCODE = {
     "F1": 122,
     "F2": 120,
@@ -47,13 +59,47 @@ HOTKEY_TO_KEYCODE = {
     "F10": 109,
     "F11": 103,
     "F12": 111,
+    "RIGHT_COMMAND": 54,
+    "RIGHT_OPTION": 61,
+    "RIGHT_SHIFT": 60,
+    "RIGHT_CONTROL": 62,
 }
 
 SUPPORTED_HOTKEYS = tuple(HOTKEY_TO_KEYCODE.keys())
+MODIFIER_KEYCODES = {54, 60, 61, 62}
+MODIFIER_DEVICE_FLAG = {
+    54: 0x0010,
+    60: 0x0004,
+    61: 0x0040,
+    62: 0x2000,
+}
+MODIFIER_MOUSE_EVENT_TYPES = {
+    kCGEventLeftMouseDown,
+    kCGEventLeftMouseUp,
+    kCGEventLeftMouseDragged,
+    kCGEventRightMouseDown,
+    kCGEventRightMouseUp,
+    kCGEventRightMouseDragged,
+    kCGEventOtherMouseDown,
+    kCGEventOtherMouseUp,
+    kCGEventOtherMouseDragged,
+    kCGEventScrollWheel,
+}
+MODIFIER_COMBO_EVENT_TYPES = {
+    kCGEventKeyDown,
+    kCGEventFlagsChanged,
+    *MODIFIER_MOUSE_EVENT_TYPES,
+}
+EVENT_TAP_EVENT_TYPES = {
+    kCGEventKeyDown,
+    kCGEventKeyUp,
+    kCGEventFlagsChanged,
+    *MODIFIER_MOUSE_EVENT_TYPES,
+}
 
 
-# Minimum interval between successive triggers (seconds).
-_DEBOUNCE_SECONDS = 0.3
+# Minimum interval between successive press callbacks (seconds).
+DEFAULT_PRESS_DEBOUNCE_SECONDS = 0.3
 
 
 def normalize_hotkey(value: str) -> str:
@@ -78,7 +124,7 @@ def parse_hotkey_keycode(value: str) -> int:
 
 
 class GlobalHotkeyListener:
-    """Listens globally for a function-key event and invokes a callback.
+    """Listens globally for a hotkey and invokes press/release callbacks.
 
     Uses a macOS ``CGEventTap`` in active mode so the configured hotkey is
     intercepted before apps receive it. The event tap's ``CFRunLoop`` runs
@@ -86,22 +132,42 @@ class GlobalHotkeyListener:
 
     Parameters
     ----------
-    on_hotkey:
-        Called (on the run-loop thread) each time the hotkey is pressed.
+    on_press:
+        Called (on the run-loop thread) when the hotkey is pressed.
+    on_release:
+        Called (on the run-loop thread) when the hotkey is released.
     hotkey:
-        Function key name, e.g. ``F5``.
+        Hotkey name, e.g. ``F5`` or ``RIGHT_COMMAND``.
+    press_debounce_seconds:
+        Minimum interval between successive press callbacks.
     """
 
-    def __init__(self, on_hotkey: Callable[[], None], *, hotkey: str = "F5") -> None:
-        self._on_hotkey = on_hotkey
+    def __init__(
+        self,
+        on_press: Callable[[], None],
+        on_release: Callable[[], None],
+        *,
+        hotkey: str = "F5",
+        press_debounce_seconds: float = DEFAULT_PRESS_DEBOUNCE_SECONDS,
+        modifier_press_on_release: bool = False,
+    ) -> None:
+        self._on_press = on_press
+        self._on_release = on_release
         self._hotkey_name = normalize_hotkey(hotkey)
         self._hotkey_keycode = parse_hotkey_keycode(self._hotkey_name)
         self._tap = None
         self._run_loop = None
         self._thread: threading.Thread | None = None
-        self._last_trigger: float = 0.0
+        self._last_press: float = 0.0
         self._started = threading.Event()
         self._start_error: str | None = None
+        self._pressed = False
+        self._press_fired = False
+        self._modifier_combo_active = False
+        self._press_timer: threading.Timer | None = None
+        self._state_lock = threading.Lock()
+        self._press_debounce_seconds = max(0.0, press_debounce_seconds)
+        self._modifier_press_on_release = modifier_press_on_release
 
     # -- CGEventTap callback -----------------------------------------------
 
@@ -120,30 +186,155 @@ class GlobalHotkeyListener:
                 CGEventTapEnable(self._tap, True)
             return event
 
-        keycode = CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode)
-
-        if keycode != self._hotkey_keycode or event_type != kCGEventKeyDown:
+        if (
+            self._hotkey_keycode in MODIFIER_KEYCODES
+            and event_type in MODIFIER_MOUSE_EVENT_TYPES
+        ):
+            self._note_modifier_combo(event_type)
             return event
 
-        # Ignore auto-repeat events (holding key down), but still swallow
-        # the key so it does not leak into the focused application.
-        if CGEventGetIntegerValueField(event, kCGKeyboardEventAutorepeat):
+        keycode = CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode)
+        if self._hotkey_keycode in MODIFIER_KEYCODES and keycode != self._hotkey_keycode:
+            self._note_modifier_combo(event_type)
+            return event
+
+        if keycode != self._hotkey_keycode:
+            return event
+
+        if keycode in MODIFIER_KEYCODES:
+            return self._handle_modifier_event(event_type, event)
+        return self._handle_standard_key_event(event_type, event)
+
+    def _handle_standard_key_event(self, event_type: int, event: object) -> object:
+        if event_type == kCGEventKeyDown:
+            if CGEventGetIntegerValueField(event, kCGKeyboardEventAutorepeat):
+                return None
+            if not self._should_fire_press():
+                return None
+            self._pressed = True
+            logger.debug("%s hotkey pressed", self._hotkey_name)
+            self._safe_invoke(self._on_press, "press")
             return None
 
-        # Debounce rapid presses, while keeping the key intercepted.
-        now = time.monotonic()
-        if now - self._last_trigger < _DEBOUNCE_SECONDS:
+        if event_type == kCGEventKeyUp:
+            self._pressed = False
+            logger.debug("%s hotkey released", self._hotkey_name)
+            self._safe_invoke(self._on_release, "release")
             return None
-        self._last_trigger = now
 
-        logger.debug("%s hotkey triggered", self._hotkey_name)
-        try:
-            self._on_hotkey()
-        except Exception:
-            logger.exception("Hotkey callback error")
+        return event
 
-        # Swallow the hotkey so other applications don't receive it.
+    def _handle_modifier_event(self, event_type: int, event: object) -> object:
+        if event_type == kCGEventFlagsChanged:
+            device_flags = CGEventGetFlags(event) & 0xFFFF
+            is_pressed = bool(device_flags & MODIFIER_DEVICE_FLAG[self._hotkey_keycode])
+
+            if is_pressed:
+                self._handle_modifier_press()
+            else:
+                self._handle_modifier_release()
+
         return None
+
+    def _handle_modifier_press(self) -> None:
+        with self._state_lock:
+            if self._pressed or not self._should_fire_press():
+                return
+            self._pressed = True
+            self._press_fired = False
+            self._modifier_combo_active = False
+            modifier_press_on_release = self._modifier_press_on_release
+
+        if modifier_press_on_release:
+            return
+        self._schedule_modifier_press()
+
+    def _handle_modifier_release(self) -> None:
+        should_tap = False
+        should_release = False
+
+        with self._state_lock:
+            self._cancel_press_timer_locked()
+            if self._modifier_press_on_release:
+                should_tap = self._pressed and not self._modifier_combo_active
+            else:
+                should_release = (
+                    self._pressed and self._press_fired and not self._modifier_combo_active
+                )
+            self._pressed = False
+            self._press_fired = False
+            self._modifier_combo_active = False
+
+        if should_tap:
+            logger.debug("%s hotkey tapped", self._hotkey_name)
+            self._safe_invoke(self._on_press, "press")
+            return
+
+        if should_release:
+            logger.debug("%s hotkey released", self._hotkey_name)
+            self._safe_invoke(self._on_release, "release")
+
+    def _schedule_modifier_press(self) -> None:
+        self._cancel_press_timer()
+        if self._press_debounce_seconds == 0:
+            self._fire_modifier_press()
+            return
+        timer = threading.Timer(self._press_debounce_seconds, self._fire_modifier_press)
+        timer.daemon = True
+        self._press_timer = timer
+        timer.start()
+
+    def _fire_modifier_press(self) -> None:
+        with self._state_lock:
+            self._press_timer = None
+            if not self._pressed or self._modifier_combo_active or self._press_fired:
+                return
+            self._press_fired = True
+
+        logger.debug("%s hotkey pressed", self._hotkey_name)
+        self._safe_invoke(self._on_press, "press")
+
+    def _note_modifier_combo(self, event_type: int) -> None:
+        if event_type not in MODIFIER_COMBO_EVENT_TYPES:
+            return
+
+        should_release = False
+        with self._state_lock:
+            if not self._pressed or self._modifier_combo_active:
+                return
+            self._modifier_combo_active = True
+            self._cancel_press_timer_locked()
+            if self._press_fired:
+                self._pressed = False
+                self._press_fired = False
+                should_release = True
+
+        if should_release:
+            logger.debug("%s hotkey cancelled by key combo", self._hotkey_name)
+            self._safe_invoke(self._on_release, "release")
+
+    def _cancel_press_timer(self) -> None:
+        with self._state_lock:
+            self._cancel_press_timer_locked()
+
+    def _cancel_press_timer_locked(self) -> None:
+        if self._press_timer is None:
+            return
+        self._press_timer.cancel()
+        self._press_timer = None
+
+    def _should_fire_press(self) -> bool:
+        now = time.monotonic()
+        if now - self._last_press < self._press_debounce_seconds:
+            return False
+        self._last_press = now
+        return True
+
+    def _safe_invoke(self, callback: Callable[[], None], phase: str) -> None:
+        try:
+            callback()
+        except Exception:
+            logger.exception("Hotkey %s callback error", phase)
 
     # -- public API --------------------------------------------------------
 
@@ -185,6 +376,11 @@ class GlobalHotkeyListener:
 
     def stop(self) -> None:
         """Disable the event tap and stop the run loop."""
+        with self._state_lock:
+            self._cancel_press_timer_locked()
+            self._pressed = False
+            self._press_fired = False
+            self._modifier_combo_active = False
         if self._tap is not None:
             CGEventTapEnable(self._tap, False)
             self._tap = None
@@ -198,7 +394,9 @@ class GlobalHotkeyListener:
     def _run(self) -> None:
         """Create the event tap and enter the CFRunLoop (blocks)."""
         try:
-            mask = 1 << kCGEventKeyDown
+            mask = 0
+            for event_type in EVENT_TAP_EVENT_TYPES:
+                mask |= 1 << event_type
 
             # 0 = kCGEventTapOptionDefault — active tap; callback may swallow
             # events by returning None.

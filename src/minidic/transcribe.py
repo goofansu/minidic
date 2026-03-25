@@ -71,6 +71,9 @@ class _BaseTranscriber:
     def transcribe(self, audio_f32: np.ndarray) -> str:
         raise NotImplementedError
 
+    def postprocess_text(self, text: str) -> str:
+        return self._clean_text(text)
+
     def open_stream(self) -> StreamSession:
         raise NotImplementedError
 
@@ -269,6 +272,9 @@ class Transcriber:
 
     def transcribe(self, audio_f32: np.ndarray) -> str:
         return self._backend.transcribe(audio_f32)
+
+    def postprocess_text(self, text: str) -> str:
+        return self._backend.postprocess_text(text)
 
     def open_stream(self) -> StreamSession:
         return self._backend.open_stream()

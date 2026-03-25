@@ -6,7 +6,7 @@ import json
 import os
 import tempfile
 from pathlib import Path
-from typing import Mapping, TypedDict
+from typing import Final, Mapping, TypedDict
 
 _SETTINGS_DIR = Path.home() / ".minidic"
 SETTINGS_FILE = _SETTINGS_DIR / "settings.json"
@@ -15,6 +15,27 @@ DEFAULT_DURATION_SECONDS = 60.0
 DEFAULT_ONLINE = False
 DEFAULT_POLISH = False
 DEFAULT_GROQ_WHISPER_PROMPT = ""
+DEFAULT_HOTKEY = "F5"
+DEFAULT_HOTKEY_MODE = "toggle"
+SUPPORTED_HOTKEY_MODES: Final[tuple[str, ...]] = ("toggle", "push_to_talk")
+SUPPORTED_HOTKEYS: Final[tuple[str, ...]] = (
+    "F1",
+    "F2",
+    "F3",
+    "F4",
+    "F5",
+    "F6",
+    "F7",
+    "F8",
+    "F9",
+    "F10",
+    "F11",
+    "F12",
+    "RIGHT_COMMAND",
+    "RIGHT_OPTION",
+    "RIGHT_SHIFT",
+    "RIGHT_CONTROL",
+)
 
 
 class Settings(TypedDict):
@@ -22,6 +43,8 @@ class Settings(TypedDict):
     polish: bool
     duration_seconds: float
     groq_whisper_prompt: str
+    hotkey: str
+    hotkey_mode: str
 
 
 DEFAULT_SETTINGS: Settings = {
@@ -29,6 +52,8 @@ DEFAULT_SETTINGS: Settings = {
     "polish": DEFAULT_POLISH,
     "duration_seconds": DEFAULT_DURATION_SECONDS,
     "groq_whisper_prompt": DEFAULT_GROQ_WHISPER_PROMPT,
+    "hotkey": DEFAULT_HOTKEY,
+    "hotkey_mode": DEFAULT_HOTKEY_MODE,
 }
 
 
@@ -54,6 +79,24 @@ def _normalize_text(value: object, *, default: str) -> str:
     return default
 
 
+def _normalize_hotkey_mode(value: object, *, default: str) -> str:
+    if not isinstance(value, str):
+        return default
+    normalized = value.strip().lower()
+    if normalized in SUPPORTED_HOTKEY_MODES:
+        return normalized
+    return default
+
+
+def _normalize_hotkey(value: object, *, default: str) -> str:
+    if not isinstance(value, str):
+        return default
+    normalized = value.strip().upper()
+    if normalized in SUPPORTED_HOTKEYS:
+        return normalized
+    return default
+
+
 def validate_settings(data: object) -> Settings:
     payload = data if isinstance(data, Mapping) else {}
     return {
@@ -65,6 +108,14 @@ def validate_settings(data: object) -> Settings:
         "groq_whisper_prompt": _normalize_text(
             payload.get("groq_whisper_prompt"),
             default=DEFAULT_SETTINGS["groq_whisper_prompt"],
+        ),
+        "hotkey": _normalize_hotkey(
+            payload.get("hotkey"),
+            default=DEFAULT_SETTINGS["hotkey"],
+        ),
+        "hotkey_mode": _normalize_hotkey_mode(
+            payload.get("hotkey_mode"),
+            default=DEFAULT_SETTINGS["hotkey_mode"],
         ),
     }
 
@@ -164,4 +215,24 @@ def set_groq_whisper_prompt(prompt: str) -> None:
     settings["groq_whisper_prompt"] = _normalize_text(
         prompt, default=DEFAULT_GROQ_WHISPER_PROMPT
     )
+    write_settings(settings)
+
+
+def get_hotkey() -> str:
+    return read_settings()["hotkey"]
+
+
+def set_hotkey(hotkey: str) -> None:
+    settings = read_settings()
+    settings["hotkey"] = _normalize_hotkey(hotkey, default=DEFAULT_HOTKEY)
+    write_settings(settings)
+
+
+def get_hotkey_mode() -> str:
+    return read_settings()["hotkey_mode"]
+
+
+def set_hotkey_mode(mode: str) -> None:
+    settings = read_settings()
+    settings["hotkey_mode"] = _normalize_hotkey_mode(mode, default=DEFAULT_HOTKEY_MODE)
     write_settings(settings)
