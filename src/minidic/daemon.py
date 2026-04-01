@@ -31,8 +31,11 @@ from minidic.settings import (
     get_polish,
     get_provider,
     get_recording_duration,
+    get_vad_enabled,
+    get_vad_silence_duration,
 )
 from minidic.transcribe import Transcriber
+from minidic.vad import VADFilter
 
 logger = logging.getLogger(__name__)
 
@@ -169,6 +172,7 @@ def run_daemon(args: argparse.Namespace) -> None:
     recording_chunks: list[np.ndarray] = []
     sample_count = 0
     mode = "idle"
+    vad_filter: VADFilter | None = None
     lock = threading.Lock()
 
     def _write_state(state: str) -> None:
@@ -204,7 +208,10 @@ def run_daemon(args: argparse.Namespace) -> None:
                 if current_mode == "recording":
                     recording_chunks.append(chunk)
                     sample_count += len(chunk)
-                    if sample_count >= max_speech_samples:
+                    triggered = sample_count >= max_speech_samples
+                    if not triggered and vad_filter is not None:
+                        triggered = vad_filter.process(chunk)
+                    if triggered:
                         finish_event.set()
                 elif current_mode == "draining":
                     recording_chunks.append(chunk)
@@ -330,7 +337,7 @@ def run_daemon(args: argparse.Namespace) -> None:
     listener_binding: _HotkeyListenerBinding
 
     def on_press() -> None:
-        nonlocal max_speech_samples, sample_count, mode, audio
+        nonlocal max_speech_samples, sample_count, mode, audio, vad_filter
 
         current_hotkey_mode = listener_binding.get_hotkey_mode()
 
@@ -348,8 +355,16 @@ def run_daemon(args: argparse.Namespace) -> None:
                     return
                 audio = stream
                 mode = "recording"
+                vad_filter = (
+                    VADFilter(silence_duration=get_vad_silence_duration())
+                    if get_vad_enabled()
+                    else None
+                )
                 _write_state("recording")
-                logger.info("Recording started (mic opened).")
+                logger.info(
+                    "Recording started (mic opened, VAD %s).",
+                    "enabled" if vad_filter is not None else "disabled",
+                )
             elif mode == "recording" and current_hotkey_mode == "toggle":
                 finish_event.set()
             else:

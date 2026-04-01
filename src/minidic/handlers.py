@@ -14,6 +14,8 @@ import numpy as np
 
 from minidic.audio import AudioStream, TARGET_RATE, int16_to_float32
 from minidic.daemon import run_daemon
+from minidic.settings import get_vad_enabled, get_vad_silence_duration
+from minidic.vad import VADFilter
 from minidic.runtime.process import (
     DAEMON_LOG_FILE,
     DAEMON_PID_FILE,
@@ -89,6 +91,11 @@ def run_interactive(args: argparse.Namespace) -> None:
 
             chunks: list[np.ndarray] = []
             sample_count = 0
+            vad = (
+                VADFilter(silence_duration=get_vad_silence_duration())
+                if get_vad_enabled()
+                else None
+            )
 
             try:
                 with AudioStream() as audio:
@@ -97,7 +104,19 @@ def run_interactive(args: argparse.Namespace) -> None:
                         chunks.append(chunk)
                         sample_count += len(chunk)
                         elapsed = sample_count / TARGET_RATE
-                        print(f"\r\033[K🎤 {elapsed:.1f}s", end="", flush=True)
+
+                        if vad is not None and vad.process(chunk):
+                            print(f"\r\033[K🎤 {elapsed:.1f}s", end="", flush=True)
+                            break
+
+                        if vad is not None and vad.silence_elapsed > 0:
+                            print(
+                                f"\r\033[K🎤 {elapsed:.1f}s  ·  silence {vad.silence_elapsed:.1f}s…",
+                                end="",
+                                flush=True,
+                            )
+                        else:
+                            print(f"\r\033[K🎤 {elapsed:.1f}s", end="", flush=True)
             except KeyboardInterrupt:
                 pass
 
