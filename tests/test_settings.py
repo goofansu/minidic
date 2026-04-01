@@ -8,7 +8,6 @@ from minidic import settings as settings_module
 from minidic.settings import (
     DEFAULT_GROQ_WHISPER_PROMPT,
     DEFAULT_HOTKEY,
-    DEFAULT_HOTKEY_MODE,
     DEFAULT_VAD_SILENCE_DURATION,
     validate_settings,
 )
@@ -30,30 +29,15 @@ class TestValidateSettings:
 
         assert settings["groq_whisper_prompt"] == DEFAULT_GROQ_WHISPER_PROMPT
 
-    def test_hotkey_mode_defaults_to_toggle(self):
-        settings = validate_settings({})
-
-        assert settings["hotkey_mode"] == DEFAULT_HOTKEY_MODE
-
-    def test_hotkey_mode_accepts_supported_values_case_insensitively(self):
-        settings = validate_settings({"hotkey_mode": "Push_To_Talk"})
-
-        assert settings["hotkey_mode"] == "push_to_talk"
-
-    def test_hotkey_mode_rejects_unknown_values(self):
-        settings = validate_settings({"hotkey_mode": "hold"})
-
-        assert settings["hotkey_mode"] == DEFAULT_HOTKEY_MODE
-
     def test_hotkey_defaults_to_f5(self):
         settings = validate_settings({})
 
         assert settings["hotkey"] == DEFAULT_HOTKEY
 
     def test_hotkey_accepts_supported_values_case_insensitively(self):
-        settings = validate_settings({"hotkey": "right_command"})
+        settings = validate_settings({"hotkey": "f1"})
 
-        assert settings["hotkey"] == "RIGHT_COMMAND"
+        assert settings["hotkey"] == "F1"
 
     def test_hotkey_rejects_unknown_values(self):
         settings = validate_settings({"hotkey": "space"})
@@ -103,9 +87,7 @@ class TestValidateSettings:
         settings = settings_module.read_settings()
 
         assert settings["hotkey"] == DEFAULT_HOTKEY
-        assert settings["hotkey_mode"] == DEFAULT_HOTKEY_MODE
 
         persisted = json.loads(settings_file.read_text())
         assert persisted["hotkey"] == DEFAULT_HOTKEY
-        assert persisted["hotkey_mode"] == DEFAULT_HOTKEY_MODE
         assert persisted["vad_silence_duration"] == DEFAULT_VAD_SILENCE_DURATION

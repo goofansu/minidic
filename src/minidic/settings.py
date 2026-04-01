@@ -16,11 +16,9 @@ DEFAULT_ONLINE = False
 DEFAULT_POLISH = False
 DEFAULT_GROQ_WHISPER_PROMPT = ""
 DEFAULT_HOTKEY = "F5"
-DEFAULT_HOTKEY_MODE = "toggle"
 DEFAULT_VAD_SILENCE_DURATION = 1.5
 _VAD_SILENCE_MIN = 0.3
 _VAD_SILENCE_MAX = 10.0
-SUPPORTED_HOTKEY_MODES: Final[tuple[str, ...]] = ("toggle", "push_to_talk")
 SUPPORTED_HOTKEYS: Final[tuple[str, ...]] = (
     "F1",
     "F2",
@@ -34,10 +32,6 @@ SUPPORTED_HOTKEYS: Final[tuple[str, ...]] = (
     "F10",
     "F11",
     "F12",
-    "RIGHT_COMMAND",
-    "RIGHT_OPTION",
-    "RIGHT_SHIFT",
-    "RIGHT_CONTROL",
 )
 
 
@@ -47,7 +41,6 @@ class Settings(TypedDict):
     duration_seconds: float
     groq_whisper_prompt: str
     hotkey: str
-    hotkey_mode: str
     vad_silence_duration: float
 
 
@@ -57,7 +50,6 @@ DEFAULT_SETTINGS: Settings = {
     "duration_seconds": DEFAULT_DURATION_SECONDS,
     "groq_whisper_prompt": DEFAULT_GROQ_WHISPER_PROMPT,
     "hotkey": DEFAULT_HOTKEY,
-    "hotkey_mode": DEFAULT_HOTKEY_MODE,
     "vad_silence_duration": DEFAULT_VAD_SILENCE_DURATION,
 }
 
@@ -81,15 +73,6 @@ def _normalize_duration_seconds(value: object, *, default: float) -> float:
 def _normalize_text(value: object, *, default: str) -> str:
     if isinstance(value, str):
         return value
-    return default
-
-
-def _normalize_hotkey_mode(value: object, *, default: str) -> str:
-    if not isinstance(value, str):
-        return default
-    normalized = value.strip().lower()
-    if normalized in SUPPORTED_HOTKEY_MODES:
-        return normalized
     return default
 
 
@@ -127,10 +110,6 @@ def validate_settings(data: object) -> Settings:
         "hotkey": _normalize_hotkey(
             payload.get("hotkey"),
             default=DEFAULT_SETTINGS["hotkey"],
-        ),
-        "hotkey_mode": _normalize_hotkey_mode(
-            payload.get("hotkey_mode"),
-            default=DEFAULT_SETTINGS["hotkey_mode"],
         ),
         "vad_silence_duration": _normalize_vad_silence_duration(
             payload.get("vad_silence_duration"),
@@ -244,16 +223,6 @@ def get_hotkey() -> str:
 def set_hotkey(hotkey: str) -> None:
     settings = read_settings()
     settings["hotkey"] = _normalize_hotkey(hotkey, default=DEFAULT_HOTKEY)
-    write_settings(settings)
-
-
-def get_hotkey_mode() -> str:
-    return read_settings()["hotkey_mode"]
-
-
-def set_hotkey_mode(mode: str) -> None:
-    settings = read_settings()
-    settings["hotkey_mode"] = _normalize_hotkey_mode(mode, default=DEFAULT_HOTKEY_MODE)
     write_settings(settings)
 
 

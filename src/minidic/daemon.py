@@ -27,7 +27,6 @@ from minidic.runtime.state import (
 from minidic.settings import (
     get_groq_whisper_prompt,
     get_hotkey,
-    get_hotkey_mode,
     get_polish,
     get_provider,
     get_recording_duration,
@@ -42,65 +41,45 @@ _MINIDIC_DIR = Path.home() / ".minidic"
 _MODEL_IDLE_UNLOAD_SECONDS = 30 * 60
 
 
-def _hotkey_listener_kwargs(hotkey_mode: str) -> dict[str, float | bool]:
-    return {
-        "press_debounce_seconds": 0.05 if hotkey_mode == "push_to_talk" else 0.3,
-        "modifier_press_on_release": hotkey_mode == "toggle",
-    }
-
-
 class _HotkeyListenerBinding:
     def __init__(
         self,
         *,
-        on_press: Callable[[], None],
-        on_release: Callable[[], None],
+        on_hotkey: Callable[[], None],
         listener_factory: Callable[..., object],
     ) -> None:
-        self._on_press = on_press
-        self._on_release = on_release
+        self._on_hotkey = on_hotkey
         self._listener_factory = listener_factory
         self._listener = None
         self._hotkey: str | None = None
-        self._hotkey_mode: str | None = None
         self._lock = threading.Lock()
 
-    def start(self, *, hotkey: str, hotkey_mode: str) -> None:
+    def start(self, *, hotkey: str) -> None:
         listener = self._listener_factory(
-            on_press=self._on_press,
-            on_release=self._on_release,
+            on_hotkey=self._on_hotkey,
             hotkey=hotkey,
-            **_hotkey_listener_kwargs(hotkey_mode),
         )
         listener.start()
         with self._lock:
             self._listener = listener
             self._hotkey = hotkey
-            self._hotkey_mode = hotkey_mode
 
     def reload_if_needed(self) -> bool:
         desired_hotkey = get_hotkey()
-        desired_hotkey_mode = get_hotkey_mode()
         with self._lock:
-            if (
-                desired_hotkey == self._hotkey
-                and desired_hotkey_mode == self._hotkey_mode
-            ):
+            if desired_hotkey == self._hotkey:
                 return False
             current_listener = self._listener
 
         listener = self._listener_factory(
-            on_press=self._on_press,
-            on_release=self._on_release,
+            on_hotkey=self._on_hotkey,
             hotkey=desired_hotkey,
-            **_hotkey_listener_kwargs(desired_hotkey_mode),
         )
         listener.start()
 
         with self._lock:
             self._listener = listener
             self._hotkey = desired_hotkey
-            self._hotkey_mode = desired_hotkey_mode
 
         if current_listener is not None:
             current_listener.stop()
@@ -113,10 +92,6 @@ class _HotkeyListenerBinding:
             self._listener = None
         if listener is not None:
             listener.stop()
-
-    def get_hotkey_mode(self) -> str | None:
-        with self._lock:
-            return self._hotkey_mode
 
 
 def _save_wav(chunks: list[np.ndarray]) -> Path:
@@ -152,7 +127,6 @@ def run_daemon(args: argparse.Namespace) -> None:
 
     whisper_prompt = get_groq_whisper_prompt()
     hotkey = get_hotkey()
-    hotkey_mode = get_hotkey_mode()
     logger.debug("Loaded Groq Whisper prompt at daemon start: %r", whisper_prompt)
     transcriber = Transcriber(
         provider=get_provider(),
@@ -333,12 +307,8 @@ def run_daemon(args: argparse.Namespace) -> None:
                 last_model_use = None
                 logger.info("%s unloaded after %.0fs idle.", backend_name, idle_for)
 
-    listener_binding: _HotkeyListenerBinding
-
-    def on_press() -> None:
+    def on_hotkey() -> None:
         nonlocal max_speech_samples, sample_count, mode, audio, vad_filter
-
-        current_hotkey_mode = listener_binding.get_hotkey_mode()
 
         with lock:
             if mode == "idle":
@@ -354,31 +324,13 @@ def run_daemon(args: argparse.Namespace) -> None:
                     return
                 audio = stream
                 mode = "recording"
-                vad_filter = (
-                    VADFilter(silence_duration=get_vad_silence_duration())
-                    if current_hotkey_mode == "toggle"
-                    else None
-                )
+                vad_filter = VADFilter(silence_duration=get_vad_silence_duration())
                 _write_state("recording")
-                logger.info(
-                    "Recording started (mic opened, VAD %s).",
-                    "enabled" if vad_filter is not None else "disabled",
-                )
-            elif mode == "recording" and current_hotkey_mode == "toggle":
+                logger.info("Recording started (mic opened).")
+            elif mode == "recording":
                 finish_event.set()
             else:
-                logger.debug("Hotkey press ignored — transcription in progress")
-
-    def on_release() -> None:
-        current_hotkey_mode = listener_binding.get_hotkey_mode()
-        if current_hotkey_mode != "push_to_talk":
-            return
-
-        with lock:
-            current_mode = mode
-
-        if current_mode == "recording":
-            finish_event.set()
+                logger.debug("Hotkey ignored — transcription in progress")
 
     def _hotkey_listener_reloader() -> None:
         while not shutdown.wait(0.5):
@@ -389,11 +341,7 @@ def run_daemon(args: argparse.Namespace) -> None:
             try:
                 if not listener_binding.reload_if_needed():
                     continue
-                logger.info(
-                    "Reloaded hotkey listener — %s to dictate (%s mode).",
-                    get_hotkey(),
-                    listener_binding.get_hotkey_mode(),
-                )
+                logger.info("Reloaded hotkey listener — %s to dictate.", get_hotkey())
             except Exception:
                 logger.exception("Failed to reload hotkey listener")
 
@@ -401,11 +349,10 @@ def run_daemon(args: argparse.Namespace) -> None:
     threading.Thread(target=_model_reaper, name="model-reaper", daemon=True).start()
 
     listener_binding = _HotkeyListenerBinding(
-        on_press=on_press,
-        on_release=on_release,
+        on_hotkey=on_hotkey,
         listener_factory=GlobalHotkeyListener,
     )
-    listener_binding.start(hotkey=hotkey, hotkey_mode=hotkey_mode)
+    listener_binding.start(hotkey=hotkey)
     threading.Thread(
         target=_hotkey_listener_reloader,
         name="hotkey-listener-reloader",
@@ -414,7 +361,7 @@ def run_daemon(args: argparse.Namespace) -> None:
 
     DAEMON_PID_FILE.write_text(str(os.getpid()))
     _write_state("idle")
-    logger.info("Daemon ready — %s to dictate (%s mode).", hotkey, hotkey_mode)
+    logger.info("Daemon ready — %s to dictate.", hotkey)
 
     shutdown.wait()
 

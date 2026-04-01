@@ -15,34 +15,13 @@ class TestProviderValues:
 
 
 class TestHotkeyListenerBinding:
-    def test_listener_kwargs_match_hotkey_mode(self):
-        assert daemon_module._hotkey_listener_kwargs("toggle") == {
-            "press_debounce_seconds": 0.3,
-            "modifier_press_on_release": True,
-        }
-        assert daemon_module._hotkey_listener_kwargs("push_to_talk") == {
-            "press_debounce_seconds": 0.05,
-            "modifier_press_on_release": False,
-        }
-
-    def test_reload_if_needed_rebuilds_listener_when_mode_changes(self, monkeypatch):
+    def test_reload_if_needed_rebuilds_listener_when_hotkey_changes(self, monkeypatch):
         created = []
 
         class FakeListener:
-            def __init__(
-                self,
-                *,
-                on_press,
-                on_release,
-                hotkey,
-                press_debounce_seconds,
-                modifier_press_on_release,
-            ) -> None:
-                self.on_press = on_press
-                self.on_release = on_release
+            def __init__(self, *, on_hotkey, hotkey) -> None:
+                self.on_hotkey = on_hotkey
                 self.hotkey = hotkey
-                self.press_debounce_seconds = press_debounce_seconds
-                self.modifier_press_on_release = modifier_press_on_release
                 self.started = False
                 self.stopped = False
                 created.append(self)
@@ -54,14 +33,12 @@ class TestHotkeyListenerBinding:
                 self.stopped = True
 
         binding = daemon_module._HotkeyListenerBinding(
-            on_press=lambda: None,
-            on_release=lambda: None,
+            on_hotkey=lambda: None,
             listener_factory=FakeListener,
         )
-        binding.start(hotkey="RIGHT_COMMAND", hotkey_mode="toggle")
+        binding.start(hotkey="F5")
 
-        monkeypatch.setattr(daemon_module, "get_hotkey", lambda: "RIGHT_COMMAND")
-        monkeypatch.setattr(daemon_module, "get_hotkey_mode", lambda: "push_to_talk")
+        monkeypatch.setattr(daemon_module, "get_hotkey", lambda: "F6")
 
         assert binding.reload_if_needed() is True
         assert len(created) == 2
@@ -71,26 +48,14 @@ class TestHotkeyListenerBinding:
         assert original_listener.stopped is True
         assert reloaded_listener.started is True
         assert reloaded_listener.stopped is False
-        assert reloaded_listener.press_debounce_seconds == 0.05
-        assert reloaded_listener.modifier_press_on_release is False
-        assert binding.get_hotkey_mode() == "push_to_talk"
+        assert reloaded_listener.hotkey == "F6"
 
     def test_reload_if_needed_is_noop_when_settings_match(self, monkeypatch):
         created = []
 
         class FakeListener:
-            def __init__(
-                self,
-                *,
-                on_press,
-                on_release,
-                hotkey,
-                press_debounce_seconds,
-                modifier_press_on_release,
-            ) -> None:
+            def __init__(self, *, on_hotkey, hotkey) -> None:
                 self.hotkey = hotkey
-                self.press_debounce_seconds = press_debounce_seconds
-                self.modifier_press_on_release = modifier_press_on_release
                 self.started = False
                 self.stopped = False
                 created.append(self)
@@ -102,14 +67,12 @@ class TestHotkeyListenerBinding:
                 self.stopped = True
 
         binding = daemon_module._HotkeyListenerBinding(
-            on_press=lambda: None,
-            on_release=lambda: None,
+            on_hotkey=lambda: None,
             listener_factory=FakeListener,
         )
-        binding.start(hotkey="RIGHT_COMMAND", hotkey_mode="toggle")
+        binding.start(hotkey="F5")
 
-        monkeypatch.setattr(daemon_module, "get_hotkey", lambda: "RIGHT_COMMAND")
-        monkeypatch.setattr(daemon_module, "get_hotkey_mode", lambda: "toggle")
+        monkeypatch.setattr(daemon_module, "get_hotkey", lambda: "F5")
 
         assert binding.reload_if_needed() is False
         assert len(created) == 1
