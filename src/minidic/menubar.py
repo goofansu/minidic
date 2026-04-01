@@ -48,14 +48,11 @@ from minidic.settings import (
     set_online,
     set_polish,
     set_recording_duration,
-    set_vad_enabled,
-    set_vad_silence_duration,
 )
 
 ASR_ONLINE_TAGS = {0: False, 1: True}
 POLISH_TAGS = {0: False, 1: True}
 DURATION_PRESETS = (15.0, 30.0, 60.0, 90.0, 120.0)
-VAD_SILENCE_PRESETS = (0.5, 1.0, 1.5, 2.0, 3.0)
 
 
 def _infer_daemon_state() -> tuple[str, int | None, str]:
@@ -137,10 +134,6 @@ class MiniDicMenuBarApp(NSObject):
         self.polish_items: dict[str, object] = {}
         self.duration_menu_item = None
         self.duration_items: dict[float, object] = {}
-        self.vad_menu_item = None
-        self.vad_items: dict[bool, object] = {}
-        self.vad_silence_menu_item = None
-        self.vad_silence_items: dict[float, object] = {}
 
         self.last_runtime_state = "stopped"
         self.overlay_window = None
@@ -231,45 +224,6 @@ class MiniDicMenuBarApp(NSObject):
             duration_menu.addItem_(item)
             self.duration_items[duration] = item
 
-        vad_menu = NSMenu.alloc().init()
-        self.vad_menu_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
-            "Auto-stop", None, ""
-        )
-        self.menu.addItem_(self.vad_menu_item)
-        self.menu.setSubmenu_forItem_(vad_menu, self.vad_menu_item)
-
-        vad_on_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
-            "On", "selectVad:", ""
-        )
-        vad_on_item.setTarget_(self)
-        vad_on_item.setTag_(1)
-        vad_menu.addItem_(vad_on_item)
-        self.vad_items[True] = vad_on_item
-
-        vad_off_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
-            "Off", "selectVad:", ""
-        )
-        vad_off_item.setTarget_(self)
-        vad_off_item.setTag_(0)
-        vad_menu.addItem_(vad_off_item)
-        self.vad_items[False] = vad_off_item
-
-        vad_silence_menu = NSMenu.alloc().init()
-        self.vad_silence_menu_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
-            "Silence", None, ""
-        )
-        self.menu.addItem_(self.vad_silence_menu_item)
-        self.menu.setSubmenu_forItem_(vad_silence_menu, self.vad_silence_menu_item)
-
-        for silence_duration in VAD_SILENCE_PRESETS:
-            item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
-                _format_duration(silence_duration), "selectVadSilence:", ""
-            )
-            item.setTarget_(self)
-            item.setTag_(int(silence_duration * 10))
-            vad_silence_menu.addItem_(item)
-            self.vad_silence_items[silence_duration] = item
-
         open_log_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
             "Open log", "openLog:", ""
         )
@@ -358,20 +312,6 @@ class MiniDicMenuBarApp(NSObject):
             self.duration_menu_item.setTitle_(f"Duration: {_format_duration(current_duration)}")
         for duration, item in self.duration_items.items():
             item.setState_(1 if duration == current_duration else 0)
-
-        vad_enabled = settings["vad_enabled"]
-        vad_silence = settings["vad_silence_duration"]
-
-        if self.vad_menu_item is not None:
-            self.vad_menu_item.setTitle_(f"Auto-stop: {'On' if vad_enabled else 'Off'}")
-        for enabled, item in self.vad_items.items():
-            item.setState_(1 if enabled == vad_enabled else 0)
-
-        if self.vad_silence_menu_item is not None:
-            self.vad_silence_menu_item.setTitle_(f"Silence: {_format_duration(vad_silence)}")
-            self.vad_silence_menu_item.setEnabled_(vad_enabled)
-        for silence_duration, item in self.vad_silence_items.items():
-            item.setState_(1 if silence_duration == vad_silence else 0)
 
         if runtime_state == "transcribing":
             self.showTranscribingOverlay_(None)
@@ -564,14 +504,6 @@ class MiniDicMenuBarApp(NSObject):
         duration = float(sender.tag())
         set_recording_duration(duration)
         self.args.duration = duration
-        self.refreshStatus_(None)
-
-    def selectVad_(self, sender: object) -> None:
-        set_vad_enabled(bool(sender.tag()))
-        self.refreshStatus_(None)
-
-    def selectVadSilence_(self, sender: object) -> None:
-        set_vad_silence_duration(sender.tag() / 10.0)
         self.refreshStatus_(None)
 
     def openLog_(self, sender: object) -> None:

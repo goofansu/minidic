@@ -31,7 +31,6 @@ from minidic.settings import (
     get_polish,
     get_provider,
     get_recording_duration,
-    get_vad_enabled,
     get_vad_silence_duration,
 )
 from minidic.transcribe import Transcriber
@@ -357,7 +356,7 @@ def run_daemon(args: argparse.Namespace) -> None:
                 mode = "recording"
                 vad_filter = (
                     VADFilter(silence_duration=get_vad_silence_duration())
-                    if get_vad_enabled() and current_hotkey_mode == "toggle"
+                    if current_hotkey_mode == "toggle"
                     else None
                 )
                 _write_state("recording")

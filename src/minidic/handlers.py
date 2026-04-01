@@ -14,7 +14,7 @@ import numpy as np
 
 from minidic.audio import AudioStream, TARGET_RATE, int16_to_float32
 from minidic.daemon import run_daemon
-from minidic.settings import get_vad_enabled, get_vad_silence_duration
+from minidic.settings import get_vad_silence_duration
 from minidic.vad import VADFilter
 from minidic.runtime.process import (
     DAEMON_LOG_FILE,
@@ -91,11 +91,7 @@ def run_interactive(args: argparse.Namespace) -> None:
 
             chunks: list[np.ndarray] = []
             sample_count = 0
-            vad = (
-                VADFilter(silence_duration=get_vad_silence_duration())
-                if get_vad_enabled()
-                else None
-            )
+            vad = VADFilter(silence_duration=get_vad_silence_duration())
 
             try:
                 with AudioStream() as audio:

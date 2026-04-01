@@ -17,7 +17,6 @@ DEFAULT_POLISH = False
 DEFAULT_GROQ_WHISPER_PROMPT = ""
 DEFAULT_HOTKEY = "F5"
 DEFAULT_HOTKEY_MODE = "toggle"
-DEFAULT_VAD_ENABLED = True
 DEFAULT_VAD_SILENCE_DURATION = 1.5
 _VAD_SILENCE_MIN = 0.3
 _VAD_SILENCE_MAX = 10.0
@@ -49,7 +48,6 @@ class Settings(TypedDict):
     groq_whisper_prompt: str
     hotkey: str
     hotkey_mode: str
-    vad_enabled: bool
     vad_silence_duration: float
 
 
@@ -60,7 +58,6 @@ DEFAULT_SETTINGS: Settings = {
     "groq_whisper_prompt": DEFAULT_GROQ_WHISPER_PROMPT,
     "hotkey": DEFAULT_HOTKEY,
     "hotkey_mode": DEFAULT_HOTKEY_MODE,
-    "vad_enabled": DEFAULT_VAD_ENABLED,
     "vad_silence_duration": DEFAULT_VAD_SILENCE_DURATION,
 }
 
@@ -134,9 +131,6 @@ def validate_settings(data: object) -> Settings:
         "hotkey_mode": _normalize_hotkey_mode(
             payload.get("hotkey_mode"),
             default=DEFAULT_SETTINGS["hotkey_mode"],
-        ),
-        "vad_enabled": _normalize_bool(
-            payload.get("vad_enabled"), default=DEFAULT_SETTINGS["vad_enabled"]
         ),
         "vad_silence_duration": _normalize_vad_silence_duration(
             payload.get("vad_silence_duration"),
@@ -260,16 +254,6 @@ def get_hotkey_mode() -> str:
 def set_hotkey_mode(mode: str) -> None:
     settings = read_settings()
     settings["hotkey_mode"] = _normalize_hotkey_mode(mode, default=DEFAULT_HOTKEY_MODE)
-    write_settings(settings)
-
-
-def get_vad_enabled() -> bool:
-    return read_settings()["vad_enabled"]
-
-
-def set_vad_enabled(enabled: bool) -> None:
-    settings = read_settings()
-    settings["vad_enabled"] = _normalize_bool(enabled, default=DEFAULT_VAD_ENABLED)
     write_settings(settings)
 
 

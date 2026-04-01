@@ -9,7 +9,6 @@ from minidic.settings import (
     DEFAULT_GROQ_WHISPER_PROMPT,
     DEFAULT_HOTKEY,
     DEFAULT_HOTKEY_MODE,
-    DEFAULT_VAD_ENABLED,
     DEFAULT_VAD_SILENCE_DURATION,
     validate_settings,
 )
@@ -61,21 +60,6 @@ class TestValidateSettings:
 
         assert settings["hotkey"] == DEFAULT_HOTKEY
 
-    def test_vad_enabled_defaults_to_true(self):
-        settings = validate_settings({})
-
-        assert settings["vad_enabled"] == DEFAULT_VAD_ENABLED
-        assert settings["vad_enabled"] is True
-
-    def test_vad_enabled_accepts_bool(self):
-        assert validate_settings({"vad_enabled": False})["vad_enabled"] is False
-        assert validate_settings({"vad_enabled": True})["vad_enabled"] is True
-
-    def test_vad_enabled_rejects_non_bool(self):
-        settings = validate_settings({"vad_enabled": "yes"})
-
-        assert settings["vad_enabled"] == DEFAULT_VAD_ENABLED
-
     def test_vad_silence_duration_defaults_to_1_5(self):
         settings = validate_settings({})
 
@@ -124,5 +108,4 @@ class TestValidateSettings:
         persisted = json.loads(settings_file.read_text())
         assert persisted["hotkey"] == DEFAULT_HOTKEY
         assert persisted["hotkey_mode"] == DEFAULT_HOTKEY_MODE
-        assert persisted["vad_enabled"] == DEFAULT_VAD_ENABLED
         assert persisted["vad_silence_duration"] == DEFAULT_VAD_SILENCE_DURATION
