@@ -357,7 +357,7 @@ def run_daemon(args: argparse.Namespace) -> None:
                 mode = "recording"
                 vad_filter = (
                     VADFilter(silence_duration=get_vad_silence_duration())
-                    if get_vad_enabled()
+                    if get_vad_enabled() and current_hotkey_mode == "toggle"
                     else None
                 )
                 _write_state("recording")
